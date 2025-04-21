@@ -6,6 +6,7 @@ Realism Freelous Worlds source code
 - Nin0 & the NSMLW Team - Discord rich presence, Dolphin emulator detection feature, general assistance
 - mkwcat                - P1 character change feature
 - RedStoneMatt          - P1 character change feature (Kamek port)
+- GuttermanGaming       - Miscellaneous contributions
 - and to anybody else I may have forgotten
 
 I'm releasing this mainly because it still has some use, even if not much.
