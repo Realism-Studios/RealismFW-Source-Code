@@ -1,0 +1,5 @@
+# NOTE: instead of going to the titlescreen after BOOT, you go here.
+# Since the config quick-start patches that location already, we run the hack there
+---
+source_files: [../src/languageSelect.cpp]
+hooks: []

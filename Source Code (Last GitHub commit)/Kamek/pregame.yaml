@@ -1,0 +1,14 @@
+---
+source_files: [../src/pregame.cpp]
+hooks:
+  - name: PregameNewSetup
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80B6C040
+    target_func: 'PregameLytHandler::newSetup(void)'
+
+  - name: CRSIN_DurationHack
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x8091f144
+    target_func: 'dScCrsin_c::adjustPreGameDuration(void)'

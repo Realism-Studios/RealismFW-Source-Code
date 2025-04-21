@@ -1,0 +1,113 @@
+---
+# There will probably end up being enough replaced sounds to warrant them having their own yaml, so here it is...
+source_files: [../src/soundHax.cpp, ../src/soundHax.S]
+hooks:
+  - name: ClimbSounds
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x80132EFC
+    target_func: 'newClimbSounds'
+
+# Other ClimbSounds shit
+  - {name: ClimbSoundsJumpS, type: branch_insn, branch_type: bl, src_addr_pal: 0x80133120, target_func: 'newClimbSoundsJumpS'}
+  - {name: ClimbSoundsJumpSS, type: branch_insn, branch_type: bl, src_addr_pal: 0x80133134, target_func: 'newClimbSoundsJumpSS'}
+  - {name: ClimbSoundsJump, type: branch_insn, branch_type: bl, src_addr_pal: 0x80133148, target_func: 'newClimbSoundsJump'}
+  - {name: ClimbSoundsLand, type: branch_insn, branch_type: bl, src_addr_pal: 0x80132AE8, target_func: 'newClimbSoundsLand'}
+  - {name: ClimbSoundsAttack, type: branch_insn, branch_type: bl, src_addr_pal: 0x801334E4, target_func: 'newClimbSoundsAttack'}
+
+  - name: ChangeCoinCollectionSound
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x8006D2D8
+    target_func: 'ChangeCoinCollectionSound'
+
+# replace all the jump sfx with this shitty unused sound in a specific level, at least this is just 6 lines... I love discord compact mode, by the way
+  - {name: ChangeJumpSound1, type: branch_insn, branch_type: bl, src_addr_pal: 0x801460e8 ,target_func: 'ChangeJumpSound'} 
+  - {name: ChangeJumpSound2, type: branch_insn, branch_type: bl, src_addr_pal: 0x80146108, target_func: 'ChangeJumpSound'}
+  - {name: ChangeJumpSound3, type: branch_insn, branch_type: bl, src_addr_pal: 0x80146128, target_func: 'ChangeJumpSound'}
+  - {name: ChangeJumpSound4, type: branch_insn, branch_type: bl, src_addr_pal: 0x80146154, target_func: 'ChangeJumpSound'}
+  - {name: ChangeJumpSound5, type: branch_insn, branch_type: bl, src_addr_pal: 0x80146168, target_func: 'ChangeJumpSound'}
+  - {name: ChangeJumpSound6, type: branch_insn, branch_type: bl, src_addr_pal: 0x8014617c, target_func: 'ChangeJumpSound'}
+
+  - name: replaceLuigiPregameSound
+    type: patch
+    addr_pal: 0x80B6C510
+    data: '38800390' # 112: SE_VOC_LU_TIMEUP
+
+# This is just the retail sound for now
+  - name: replaceSuperGuideBlockSound
+    type: patch
+    addr_pal: 0x80AC3A00
+    data: '38800275' # 629: SE_OBJ_BLOCK_HELP_APPEAL
+
+  - name: replacePauseWindowCursorSound
+    addr_pal: 0x8015B11C
+    type: patch
+    data: '388000BC' # 188: SE_SYS_ROUTE_NG
+  
+  - name: replaceCSMenuCursorSound
+    type: patch
+    addr_pal: 0x8077AF3C
+    data: '388007DA' # (Custom) 2010: DS_cursor
+  
+  - name: replaceCSMenuBackSound
+    type: patch
+    addr_pal: 0x8077B250
+    data: '388007D9' # (Custom) 2009: DS_back
+  
+  - name: replaceWorldMapPauseSound
+    type: patch
+    addr_pal: 0x8092FA08
+    data: '388007DC' # (Custom) 2012: DS_pause
+  
+  #- name: removeWorldMapStockItemSound
+  #  type: patch
+  #  addr_pal: 0x8092FDB0
+  #  data: '38800076' # (Blank) 118: SE_DUMMY
+  
+  - name: replaceLetterWindowSound
+    type: patch
+    addr_pal: 0x8078A200
+    data: '388007E2' # (Custom) 2018: You_got_mail
+    
+  - name: replaceSeAmbTornado
+    type: patch
+    addr_pal: 0x80B6C510
+    data: '38800390' # (Custom) 2019: Mother_3_Boss
+    
+  - name: replaceSePlyChangeBiggest # this sounds like something used, but it's a dummy/empty sound effect that was probably for the mega mushroom
+    type: patch
+    addr_pal: 0x80B6C510
+    data: '38800390' # (Custom) 2020: Mother_1_Boss
+
+# Nuke bahps for music tracks used by Newer's music hacks
+# IDs to nuke: 1, 2, 4, 10
+  - name: MusicNukeBahpsNormal1
+    type: patch
+    addr_pal: 0x802F6BC8
+    data: '00000000 00000000 00000000 00000000'
+
+  - name: MusicNukeBahpsNormal2
+    type: patch
+    addr_pal: 0x802F6BE0
+    data: '00000000 00000000'
+
+  - name: MusicNukeBahpsNormal3
+    type: patch
+    addr_pal: 0x802F6C10
+    data: '00000000 00000000'
+
+  - name: MusicNukeBahpsFast1
+    type: patch
+    addr_pal: 0x802F6CB0
+    data: '00000000 00000000 00000000 00000000'
+
+  - name: MusicNukeBahpsFast2
+    type: patch
+    addr_pal: 0x802F6CC8
+    data: '00000000 00000000'
+
+  - name: MusicNukeBahpsFast3
+    type: patch
+    addr_pal: 0x802F6CF8
+    data: '00000000 00000000'

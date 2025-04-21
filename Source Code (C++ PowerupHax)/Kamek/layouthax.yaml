@@ -1,0 +1,50 @@
+# If you're looking for menu sound replacements, see soundhax.yaml
+---
+source_files: [../src/layouthax.cpp, ../src/layouthax.S]
+hooks:
+# Begin section for removing cursors and similar things
+  - name: RemoveSelectCursorFromYesNoWindow
+    type: nop_insn
+    area_pal: 0x807698A0
+  
+  - name: RemoveSelectCursorFromCourseSelectMenu
+    type: nop_insn
+    area_pal: 0x8077ADAC
+  
+  - name: RemoveSelectCursorFromPauseWindow
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8015B090
+    target_func: 'ReturnNone'
+
+# Effect hacks (there probably won't be many of these)
+  #- name: RemoveStockItemUseEffect # Wm_mr_stockitemuse
+  #  type: nop_insn
+  #  area_pal: 0x807B01AC
+  #- name: RemoveStockItemUseEffect2 # same as above
+  #  type: nop_insn
+  #  area_pal: 0x807B0298
+
+  #- name: RemoveStockItemButtonPressEffect # Wm_2d_stockitem
+  #  type: nop_insn
+  #  area_pal: 0x807b14ec
+
+# Menu hacks
+  - name: ControllerInformation_LayoutHack
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80768860
+    target_func: 'dControllerInformation_c::newLoadLayout(void)'
+
+  - name: OtasukeInfo_WriteMessageStrings
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x809166A0
+    target_func: 'dOtasukeInfo_c::writeMessageStrings(void)'
+
+  # - name: CollectionCoinBase_NewLoadLayout
+  #   type: branch_insn
+  #   branch_type: b
+  #   src_addr_pal: 0x807762C0
+  #   target_func: 'CollectionCoinBase_NewLoadLayout'
+

@@ -1,0 +1,25 @@
+source_files: [../src/qblock.S]
+hooks:
+  - name: AlternateQBlock
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80022854
+    target_func: 'QBlockVariation'
+  
+  - name: AlternateQBlock2
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8002286c
+    target_func: 'QBlockVariation2'
+  
+  - name: AlternateQBlock3
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80022b58
+    target_func: 'QBlockVariation3'
+  
+  - name: AlternateQBlock4
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80022b70
+    target_func: 'QBlockVariation4'

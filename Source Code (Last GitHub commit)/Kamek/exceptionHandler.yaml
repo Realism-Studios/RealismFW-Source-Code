@@ -1,0 +1,24 @@
+source_files: [../src/exceptionHandler.cpp, ../src/exceptionhandler.S]
+hooks:
+  - name: ReplacePrintContext
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80234CA0
+    target_func: 'PrintContext(unsigned short, void *, unsigned int, unsigned int)'
+
+# all of the below are taken from NSMASR-v2
+  - name: MuteAudioOnCrash
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x80234888
+    target_func: 'muteAudioOnCrash'
+
+  - name: DisableHorizontalScrolling
+    type: patch
+    addr_pal: 0x802D7680
+    data: '48000030'
+
+  - name: DisableInitialScroll
+    type: patch
+    addr_pal: 0x802D75A4
+    data: '48000024'

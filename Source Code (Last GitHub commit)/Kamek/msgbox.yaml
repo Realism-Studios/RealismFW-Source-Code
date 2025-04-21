@@ -1,0 +1,8 @@
+---
+source_files: [../src/msgbox.S, ../src/msgbox.cpp]
+hooks:
+  - name: QueryGlobal5758
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x800B3B50
+    target_func: 'Query5758Replacement'

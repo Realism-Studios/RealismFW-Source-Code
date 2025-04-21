@@ -1,0 +1,14 @@
+---
+source_files: [../src/linegod.cpp, ../src/linegod.S]
+hooks:
+  - name: LineGodSpawnFix
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8007EA98
+    target_func: 'BgActorSpawnFix'
+    
+  - name: BgActorSetInfoFix
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8007EA60
+    target_func: 'BgActorSetInfoFix'

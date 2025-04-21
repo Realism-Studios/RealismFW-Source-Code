@@ -1,0 +1,5 @@
+---
+#Replaces NOTHING (we must keep the scared Down Syndrome Larry)
+
+source_files: [../src/NPCmanager.cpp]
+hooks: []

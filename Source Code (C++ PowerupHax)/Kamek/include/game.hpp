@@ -1,0 +1,6780 @@
+#ifndef __KAMEK_GAME_H
+#define __KAMEK_GAME_H
+
+//#define offsetof(type, member)	((__std(size_t)) &(((type *) 0)->member))
+
+#include <common.hpp>
+#include <sdk/gx.hpp>
+#include <sdk/tpl.hpp>
+#define offsetof(type, member)	((u32) &(((type *) 0)->member))
+
+// actually EGG::Math<f>::sqrt()
+float EggSqrt(float in);
+
+extern "C" void changePosAngle(VEC3 *, S16Vec *, int);
+extern "C" void MtxToVec(Mtx *, Vec3 *);
+
+// halts game and prints an error on screen
+void OSFatal(GXColor *text, GXColor *background, const char *msg);
+
+// helper for default color
+void CallFileNotFoundFatal(const char *sourceFile, int lineNum, const char *resourceName) {
+	GXColor text = {255, 255, 255, 255};
+	GXColor back = {0, 0, 0, 0};
+	char buffer[512];
+	const char *format = {
+		"*** FATAL ERROR: ***\n"
+		"(from line %d, in %s)\n\n"
+		"The game attempted to load\n"
+		"\"%s\",\n" // our resource
+		"however the file could not be found.\n\n"
+		"Make sure the mod is installed correctly,\n"
+		"and if so, report this as a bug."
+	};
+	sprintf(buffer, format, lineNum, sourceFile, resourceName);
+	OSFatal(&text, &back, buffer);
+}
+
+void VISetNextFrameBuffer(void *buf);
+void ScreenReport(void *frameBuffer, u32 bufLength, u32 bufHeight, GXColorYUV *textColor, u32 textPosX, u32 textPosY, u32 fontLeading, const char *msg);
+
+#include <g3dhax.hpp>
+
+template <typename T>
+inline T min(T one, T two) { return (one < two) ? one : two; }
+template <typename T>
+inline T max(T one, T two) { return (one > two) ? one : two; }
+template <typename T>
+inline T clamp(T value, T one, T two) { return (value < one) ? one : ((value > two) ? two : value); }
+
+#define M_PI 3.14159265358979323846
+#define M_PI_2 (M_PI / 2)
+
+//use this along with debug_config.ini instead of OSReport for debugging purposes
+static bool debugReporting; 
+void DebugReport(const char *format, ...) {
+	if (debugReporting) {
+		OSReport(format);
+	}
+}
+
+//DebugReport but for multiple reports that fill the screen
+static bool spammyReporting; 
+void SpammyReport(const char *format, ...) {
+	if (spammyReporting) {
+		OSReport(format);
+	}
+}
+
+//for powerup-related debugging
+static bool powerupReporting; 
+void PowerupReport(const char *format, ...) {
+	if (powerupReporting) {
+		OSReport(format);
+	}
+}
+
+static bool actorLogging;
+void ActorLogReport(const char *format, ...) {
+	if (actorLogging) {
+		OSReport(format);
+	}
+}
+
+static bool heapBarActive;
+
+static bool layoutDebugging;
+void layoutDebugReport(const char *format, ...) {
+	if(layoutDebugging) {
+		OSReport(format);
+	}
+}
+
+extern "C" {
+int wcslen(const wchar_t *str);
+wchar_t *wcscpy(wchar_t *dest, const wchar_t *src);
+int strlen(const char *str);
+char *strcpy(char *dest, const char *src);
+char *strncpy(char *dest, const char *src, int num);
+int strncmp(const char *str1, const char *str2, int num);
+
+float atan(float x);
+float atan2(float y, float x);
+
+float cos(float x);
+float sin(float x);
+float ceil(float x);
+float floor(float x);
+float pow(float x, float y);
+float sqrt(float x) { return pow(x, 0.5f); }
+}
+enum Direction {
+	RIGHT = 0,
+	LEFT = 1,
+	UP = 2,
+	DOWN = 3,
+};
+
+enum CustomScenes {
+	VIDEO = 603, // hint movies and cutscenes
+};
+
+enum PlayerIDs {
+	MARIO = 0,
+	LUIGI = 1,
+	BLUE_TOAD = 2,
+	YELLOW_TOAD = 3,
+};
+
+bool DVD_Start();
+bool DVD_End();
+bool DVD_StillLoading(void *dvdclass2);
+void DVD_LoadFile(void *dvdclass, char *folder, char *file, void *callbackData);
+void DVD_LoadFiles(void *dvdclass, char *folder, char **files, int count, void *callbackData);
+void DVD_FreeFile(void *dvdclass2, char *file);
+
+extern void *DVDClass;
+
+inline void *GetDVDClass() {
+	return DVDClass;
+}
+
+inline void *GetDVDClass2() {
+	return (void*)(((u32)GetDVDClass())+4);
+}
+
+void *DVD_GetFile(void *dvdclass2, const char *arc, const char *file);
+void *DVD_GetFile(void *dvdclass2, const char *arc, const char *file, u32 *length);
+
+// make max +1 the highest value you want
+extern "C" u32 GenerateRandomNumber(int max);
+int MakeRandomNumber(int count);
+int MakeRandomNumberForTiles(int count);
+int RandInt(int min, int max) { return MakeRandomNumber(max - min) + min; }
+float RandFloat(float min, float max) { return ((float)MakeRandomNumber(10000) / 10000.0f) * (max - min) + min; }
+
+
+extern int Player_Active[4];
+extern int Player_ID[4];
+extern int Player_Powerup[4];
+extern int Player_Flags[4];
+extern int Player_Lives[4];
+extern int Player_Coins[4];
+
+// be sure to fix STOCK_ITEM and STOCK_ITEM_SHADOW class sizes when changing this!!!
+#define STOCK_POWERUP_COUNT 10
+
+#define NEW_STOCK_COUNT STOCK_POWERUP_COUNT - 7
+
+#define TOTAL_POWERUP_COUNT 14
+
+typedef struct Powerup {
+    enum Value {
+        None,
+        Mushroom,
+        FireFlower,
+        MiniShroom,
+        Propeller,
+        PenguinSuit,
+        IceFlower,
+		HammerSuit,
+		BubbleFlower,
+		LemmyFlower,
+		MandyMushroom,
+		BombFlower,
+		MegaMario,
+		BoomerangSuit,
+    };
+};
+
+struct MovieType {
+    enum Value {
+        SuperSkills,
+        Infinite1UP,
+        StarCoins,
+        SecretExit,
+    };
+};
+
+struct ScreenType {
+    enum Value {
+        Normal,
+        SuperGuide,
+        Title,
+        TitleReplay,
+        HintMovie,
+    };
+};
+
+struct StartLevelInfo {
+	u32 replayDuration;	// 0x00, controls duration of the replay
+	u8 hintMovieType; 	// 0x04, controls hint movie type: 0 = super skills, 1 = 1UP, 2 = star coins, 3 = secret exit
+	u8 entrance; 		// 0x05, set as 0xFF to use the Entrance ID set in the Area settings
+	u8 area; 			// 0x06
+	u8 isReplay; 		// 0x07
+	u32 screenType; 	// 0x08, controls level type/behavior: 0 = normal, 1 = super guide, 2 = title, 3 = title replay, 4 = hint movie
+	u8 world1; 			// 0x0C
+	u8 level1; 			// 0x0D
+	u8 world2; 			// 0x0E, this and level2 don't need to be set for going to a stage, idk what these do
+	u8 level2; 			// 0x0F
+};
+extern bool DontShowPreGame;
+extern StartLevelInfo RESTART_CRSIN_LevelStartStruct;
+extern StartLevelInfo m_startGameInfo;
+
+extern bool exitingStage;
+extern u32 stageScreenType;
+extern bool isStageReplay;
+extern u32 replayDuration;
+extern u32 levelType;
+extern bool CreditsModeActive;
+
+enum GameFlag {
+	DisableActorSpawning = 1,
+	IsStopped = 2, // enables player state change freeze
+	LevelLoadedMaybe = 4,
+	DoNotPlaySwitchBGM = 8,
+	ExtraMode = 0x10,
+	GameOver = 0x20,
+	CoinBattle = 0x40,
+	RelatedToBootScene = 0x80000, // might control if you can press a button to immediately go to the titlescreen
+	UnkFadeTypeFlag = 0x4000000, // sets screen fader to "Fade" if the flag is enabled, also might allow for manually setting frame count during fade-in func?
+	UnkFlag = 0x40000000,
+	UnkFlag2 = 0x80000000,
+};
+extern u32 GameFlag;
+
+bool QueryPlayerAvailability(int id);
+void DoStartLevel(void *info, StartLevelInfo *sl); // 800BB7D0
+void DoStartStaffCredit(void *info); // 0x800BB8D0
+
+
+// Level Conditions
+//     1 : Has Toad Block
+//     2 : Is Regular Level (has star coins, etc)
+//  0x10 : Has Normal Exit
+//  0x20 : Has Secret Exit
+//  0x40 : Warp Cannon
+//  0x80 : 1up/Green Mushroom House
+// 0x100 : Red Mushroom House
+// 0x200 : Star/Yellow Mushroom House
+enum LevelConditions {
+	HasToadBlock = 1,
+	IsRegularLevel = 2,
+	HasNormalExit = 0x10,
+	HasSecretExit = 0x20,
+	WarpCannon = 0x40,
+	GreenToadHouse = 0x80,
+	RedToadHouse = 0x100,
+	YellowToadHouse = 0x200,
+};
+void SetSomeConditionShit(int world, int level, unsigned int bits);
+bool CheckConditionShit(int world, int level, unsigned int bits);
+
+bool IsWideScreen();
+void GetSomeWidescreenCrap(VEC2 trans);
+
+#define GAMEMGR_GET_AFC(gmgr) (*((bool*)(((u32)(gmgr))+0xAFC)))
+
+#define COND_COIN1 1
+#define COND_COIN2 2
+#define COND_COIN3 4
+#define COND_COIN_ALL 7
+#define COND_NORMAL 0x10
+#define COND_SECRET 0x20
+#define COND_BOTH_EXITS 0x30
+#define COND_SGNORMAL 0x80
+#define COND_SGSECRET 0x100
+#define COND_UNLOCKED 0x200 // NEWER EXCLUSIVE
+
+
+// All of these are set by "SetWorldCompleteionBitfield" (I didn't name it)
+// at 801028D0. It's called by ScStage so it doesn't depend on Nintendo maps.
+
+#define SAVE_BIT_NEW 1
+
+// Controls whether you can QUICK SAVE or not.
+// Set if 8-Castle is complete.
+#define SAVE_BIT_GAME_COMPLETE 2
+
+// Set when all exits are complete.
+// This is defined by "ReturnWhetherConditionMaskIsValid" / "SetSomeConditionShit"
+// TODO: Need to RE and fix this for Newer...
+#define SAVE_BIT_ALL_EXITS 4
+
+// Set when all star coins in worlds 1-8 are obtained.
+// Valid levels are chosen by the condition crap as above.
+#define SAVE_BIT_ALL_STAR_COINS 8
+
+#define SAVE_BIT_ALL_STAR_COINS_W9 0x10
+
+// Set when, well... EVERYTHING is done.
+#define SAVE_BIT_EVERYTHING_TRULY_DONE 0x20
+
+// Set if a player dies eight times in a level.
+// Determines if the sparkle effects will render on the save file stars.
+#define SAVE_BIT_NO_SUPER_GUIDE 0x40
+
+
+class SaveFirstBlock {
+public:
+	char titleID[4];			// 0x00
+	u8 version[2];				// 0x04
+	u8 current_file;			// 0x06
+	u8 pad;						// 0x07, this can be used for videos unlock flag
+	u16 freemode_fav[10][0x2A];	// 0x08
+	u16 coinbtl_fav[10][0x2A];	// 0x350
+	u16 bitfield;				// 0x698
+	u16 field_69A;				// 0x69A - unused
+	u32 checksum;				// 0x69C
+};
+
+class SaveBlock {
+public:
+	u8 version[2];				// 0x00
+	u8 bitfield;				// 0x02
+	u8 current_world;			// 0x03
+	u8 current_submap;			// 0x04
+	u8 current_path_node;		// 0x05
+	u8 ibara_now;				// 0x06
+	u8 switch_on;				// 0x07
+	u8 field_08;				// 0x08 - unused
+	u8 powerups_available[7];	// 0x09 - unused: now uses new_powerups_available
+	u8 toad_level_idx[10];		// 0x10
+	u8 player_continues[4];		// 0x1A
+	u8 player_coins[4];			// 0x1E
+	u8 player_lives[4];			// 0x22
+	u8 player_flags[4];			// 0x26
+	u8 player_type[4];			// 0x2A
+	u8 player_powerup[4];		// 0x2E
+	u8 worlds_available[10];	// 0x32
+	u32 ambush_countdown[10];	// 0x3C
+	u16 field_64;				// 0x64 - unused
+	u16 credits_hiscore;		// 0x66
+	u16 score;					// 0x68
+	u32 completions[10][42];	// 0x6C
+	union {
+		u8 hint_movie_bought[70];	// 0x6FC
+		struct {
+			bool collisionDebugFlag; // 0x6FC
+			bool replayRecordFlag;	 // 0x6FD
+			u8 difficulty;			 // 0x6FE
+			bool starCoinRadarFlag;	 // 0x60F
+			bool tryAgainFlag;		 // 0x700
+		};
+	};
+	u8 toad_location[10];		// 0x742
+	u8 enemy_submap[10][4];		// 0x74C
+	u8 enemy_path_node[10][4];	// 0x774
+	u8 enemy_direction[10][4];	// 0x79C
+	u8 death_counts[10][42];	// 0x7C4
+	u8 death_count_3_4_switch;	// 0x968
+	union {
+		u8 pad[0x13];			// 0x969
+		struct  {
+			// don't move these unless you want to break your saves
+			u8 new_powerups_available[10];	// 0x969
+			u8 lastP1Character;				// 0x974
+			u16 spentStarCoins;				// 0x975
+			u8 lemmySuitUnlocked;			// 0x977
+			u8 hasWrittenNewPow;			// 0x978
+		};
+
+	};
+	u32 checksum;				// 0x97C
+
+	u32 GetLevelCondition(int world, int level);
+	bool CheckLevelCondition(int world, int level, int cond);
+	void SetLevelCondition(int world, int level, int cond);
+	void UnsetLevelCondition(int world, int level, int cond);
+	bool CheckIfCoinCollected(int world, int level, int num);
+
+	void setPlrID(int player, int character);
+	void setPlrMode(int player, u8 powerup);
+	void setRest(int player, u8 count);
+	void setCreateItem(int player, u8 flag);
+
+	void setKinopioCourseNo(int world, int level);
+	void setEnemyPathNode(int world, int enemy, u8 node);
+	void setEnemyDirection(int world, int enemy, u8 direction);
+
+	void setIbaraNow(int counter);
+
+	void newInitialize();
+};
+
+class SaveFile {
+public:
+	u32 field_00;
+	u32 field_04;
+	u32 field_08;
+	u32 field_0C;
+	u32 field_10;
+	u32 field_14;
+	u32 field_18;
+	u32 field_1C;
+
+	// Real Savefile starts here
+	SaveFirstBlock header;
+	SaveBlock blocks[3];
+	SaveBlock quickSave[3];
+
+	SaveBlock *GetBlock(int id);
+	SaveBlock *GetQSBlock(int id);
+
+	bool CheckIfWriting(); // 0x800E0540
+	void initLoadGame(s8 slot);
+};
+
+class SaveHandler {
+public:
+	u8 unknown[0x70];
+	u32 CurrentState;
+	u32 CurrentError;
+	u32 field_7C;
+};
+
+extern SaveFile *SaveFileInstance;
+extern SaveHandler *SaveHandlerInstance;
+
+inline SaveFile *GetSaveFile() {
+	return SaveFileInstance;
+}
+
+inline SaveHandler *GetSaveHandler() {
+	return SaveHandlerInstance;
+}
+
+
+// game settings
+static bool collisionDebugEnabled;
+static bool replayRecordEnabled;
+static bool starCoinRadarEnabled;
+static bool tryAgainEnabled;
+static char difficultySetting;
+
+#define DIFFICULTY_PEACEFUL		0
+#define DIFFICULTY_EASY			1
+#define DIFFICULTY_NORMAL		2
+#define DIFFICULTY_HARD			3
+#define DIFFICULTY_GOODLY_LUCK	4
+
+void setupGameSettings() {
+	SaveBlock *save = GetSaveFile()->GetBlock(-1);
+
+	collisionDebugEnabled = save->collisionDebugFlag;
+	replayRecordEnabled = save->replayRecordFlag;
+	starCoinRadarEnabled = save->starCoinRadarFlag;
+	tryAgainEnabled = save->tryAgainFlag;
+	difficultySetting = save->difficulty;
+}
+
+void copySettingsToSave() {
+	SaveBlock *save = GetSaveFile()->GetBlock(-1);
+
+	save->collisionDebugFlag = collisionDebugEnabled;
+	save->replayRecordFlag = replayRecordEnabled;
+	save->starCoinRadarFlag = starCoinRadarEnabled;
+	save->tryAgainFlag = tryAgainEnabled;
+	save->difficulty = difficultySetting;
+}
+
+void resetGameSettings() {
+	collisionDebugEnabled = false;
+	replayRecordEnabled = false;
+	starCoinRadarEnabled = false;
+	tryAgainEnabled = false;
+	difficultySetting = DIFFICULTY_NORMAL;
+}
+
+
+
+#define WPAD_DOWN	0x0001 // Actually Left, but rotated
+#define WPAD_UP		0x0002 // Actually Right, but rotated
+#define WPAD_RIGHT	0x0004 // Actually Down, but rotated
+#define WPAD_LEFT	0x0008 // Actually Up, but rotated
+#define WPAD_PLUS	0x0010
+#define WPAD_TWO	0x0100
+#define WPAD_ONE	0x0200
+#define WPAD_B		0x0400
+#define WPAD_A		0x0800
+#define WPAD_MINUS	0x1000
+
+// Nunchuk
+#define WPAD_Z		0x2000
+#define WPAD_C		0x4000
+
+#define WPAD_HOME	0x8000
+
+struct Remocon {
+	virtual ~Remocon();
+	int id;
+	int controllerType;
+	u32 untouchedButtons;
+	u32 lastUntouchedButtons;
+	u32 heldButtons;
+	u32 lastHeldButtons;
+	u32 nowPressed;
+	u32 _20, _24, _28, _2C, _30;
+	Vec acc, lastAcc;
+	Vec2 accVertical, lastAccVertical;
+	Vec2 vec_5C, lastVec_5C;
+	Vec2 vec_6C;
+	Vec2 vec_74, lastVec_74;
+	float wiimoteMoveDistanceOrSomething;
+	float lastWiimoteMoveDistanceOrSomething;
+	u8 isShaking, _8D;
+	u16 tiltAmount;
+	u8 _90, _91, _92;
+};
+
+struct RemoconMngClass {
+	void *vtable;
+	Remocon *controllers[4];
+};
+
+/*
+ * Ok, here's how the remocon/wiimote shit works:
+ * Remocon is a NSMB-specific class, it handles the different control methods
+ * and D-pad directions and such automatically.
+ *
+ * Wiimote is a generic class (part of EGG) -- well it's not actually called
+ * that, but who cares. It handles different types of controllers. Only
+ * query it if whatever you're accessing is control type dependent.
+ */
+
+extern RemoconMngClass *RemoconMng;
+extern int ActiveWiimoteID;
+extern void *ActiveWiimote;
+
+inline RemoconMngClass *GetRemoconMng() {
+	return RemoconMng;
+}
+
+inline int GetActiveWiimoteID() {
+	return ActiveWiimoteID;
+}
+
+inline Remocon *GetActiveRemocon() {
+	return GetRemoconMng()->controllers[GetActiveWiimoteID()];
+}
+
+inline void *GetActiveWiimote() {
+	return ActiveWiimote;
+}
+
+inline unsigned int Remocon_GetButtons(Remocon *self) {
+	return *((unsigned int*)((u32)self+0x18));
+}
+
+inline unsigned int Remocon_GetPressed(Remocon *self) {
+	return *((unsigned int*)((u32)self+0x1C));
+}
+
+typedef bool (*__Wiimote_TestButtons_type)(void*, unsigned int);
+inline bool Wiimote_TestButtons(void *self, unsigned int btns) {
+	VF_BEGIN(__Wiimote_TestButtons_type, self, 8, 0)
+		return VF_CALL(self, btns);
+	VF_END;
+}
+
+int SearchForIndexOfPlayerID(int id);
+
+bool CheckIfContinueShouldBeActivated();
+
+bool CheckIfMenuShouldBeCancelledForSpecifiedWiimote(int num);
+
+bool isControllerWiimote(int playerID);
+
+void StartTitleScreenStage(bool realDemo, int sceneParam);
+
+bool CheckIfWeCantDoStuff();
+
+u32 QueryGlobal5758(u32 check);
+
+void SaveGame(void *classDoesntMatter, bool isQuick);
+
+#include <actors.hpp>
+void *CreateParentedObject(short classID, void *parent, int settings, char something);
+void *CreateChildObject(short classID, void *parent, int settings, int unk1, int unk2); // unks are position and rotation
+
+
+#define WIPE_FADE 0
+#define WIPE_CIRCLE 1
+#define WIPE_BOWSER 2
+#define WIPE_WAVY 3
+#define WIPE_MARIO 4
+#define WIPE_CIRCLE_s 5
+
+// this sets the screen wipe/fader, doesn't actually activate it
+void ActivateWipe(int type);
+
+typedef void (*ScreenDrawFunc)();
+
+extern ScreenDrawFunc *CurrentDrawFunc;
+void WorldMapDrawFunc();
+void GameSetupDrawFunc();
+
+void setScreenColorForScene(GXColor *screenClr);
+
+void GameSetup__LoadScene(void *self); // 0x80919560
+void FreeScene(int id);
+
+void WpadShit(int unk); // 0x8016F780
+
+void *BgTexMng__LoadAnimTile(void *self, int tileset, short tile, char *name, char *delays, char reverse); // 0x80087B60
+
+extern void *GameHeaps[];
+
+extern bool SetScreenFader(int fadeID); // sets fader to use when fader plays
+void PlayInFader(short frameCount = 0x1E);
+void PlayOutFader(short frameCount = 0x1E);
+
+bool finishedFadeIn(void *mFaderPtr);
+bool finishedFadeOut(void *mFaderPtr);
+
+void *mFaderPtr; // 0x8042A720
+
+
+class dFlagMgr_c {
+public:
+	dFlagMgr_c();
+
+	enum ActionFlag {
+		ACTIVATE = 1,
+		TICKS = 2
+	};
+
+	u64 flags;
+	float _8[64], _108[64];
+	u8 _208[64];
+	u64 _248[64];
+	u8 _448[64];
+
+	u32 ticksRemainingForAction[64];
+	u8 actionFlag[64];
+	u32 _5C8[64]; // somehow sound related?! assigned by last param to set(); only checked for == 0
+	u8 _6C8; // assigned -1 by FlagMgr, and other values by the Switch object, nothing else though
+
+	void setup(bool isNewLevel);
+	void applyAndClearAllTimedActions(); // only used when setup(true) is called
+	void execute();
+
+	void set(u8 number, int delay, bool activate, bool reverseEffect, bool makeNoise, u32 unknown=0);
+
+	u8 findLowestFlagInSet(u32 unk, u64 set);
+
+	void setSpecial(u8 number, float to8, float to108, u8 to208, u32 unk, u64 to248);
+	float get8(u8 number);
+	float get108(u8 number);
+	u8 get208(u8 number);
+	u64 get248(u8 number);
+	u8 get448(u8 number);
+
+	// convenience inline functions which may or may not actually exist in Nintendo's original code
+	u64 mask(u8 number) { return (u64)1 << number; }
+	bool active(u8 number) { return (flags & mask(number)) != 0; }
+	bool inactive(u8 number) { return (flags & mask(number)) == 0; }
+
+	static dFlagMgr_c *instance;
+};
+
+
+class WLClass {
+public:
+	u32 _0;
+	u32 _4;
+	u32 _8;
+	u32 _otherDatum[38];
+
+	static WLClass *instance;
+
+	void demoControlAllPlayers();
+	void disableDemoControl(bool uselessVar);
+};
+
+
+// formerly Stage32C_c
+class dEnemyMng_c {
+public:
+	u32 bulletData1[4][8];
+	u32 bulletData2[4][8];
+	u32 enemyCombos[4];
+	u32 somethingAboutHatenaBalloons;
+	u32 redCoinCount[4];
+	u32 _124[4];
+	u32 greenCoinsCollected;
+	u32 hasKilledEnemyThisTick_maybe;
+	u16 booID;
+	u8 _13E, _13F;
+	u32 bigBooID;
+	u32 homingBanzaiID;
+	u16 bulletBillCount;
+	u8 _14A, _14B;
+	u32 bombCount;
+	u32 goombaCount;
+	int enemyKillCounter_maybe;
+	int a_counter;
+	u32 freezeMarioBossFlag;
+	u32 aboutMortonBigPile;
+	u32 somethingAboutPunchingChainlinkFence;
+	void *currentBigHanaMgr; // daBigHanaMgr_c
+	u32 _16C;
+	u8 penguinCount;
+	u8 _171, _172, _173;
+	int pokeyTimer;
+
+	static dEnemyMng_c *instance; // 0x8042A1F0
+};
+
+// who knows
+class dEffectExplosionMgr_c {
+public:
+	u16 _0;
+};
+class dTimerMgr_c {
+public:
+	u16 _0;
+};
+class dBlockMgr_c {
+public:
+	u32 areDonutLiftsDisabled;
+
+	static dBlockMgr_c *instance; // 0x8042A0F8
+};
+class dScoreMng_c {
+public:
+	u32 _0;
+
+	static dScoreMng_c *instance; // 0x8042A330
+};
+
+class dBeansKuriboMng_c {
+public:
+	u32 mini_goomba_uid[100];
+	u32 mini_goomba_player_id[100];
+	u8 generatedNumberFlag[4];
+	u16 generatedNumbers[4];
+
+	static dBeansKuriboMng_c *instance; // 0x8042A0A0
+};
+
+class dWaterEntryMng_c {
+public:
+	struct WaterData {
+		Vec pos;
+		float width, height;
+		u32 isInUse;
+		u8 type; // 0 = water, 1 = lava, 2 = poison, 3 = round bubble, 4 = tall bubble, 5 = wide bubble
+		u8 layer;
+		u8 pad[2];
+	};
+
+	WaterData data[80];
+	float current;
+
+	static dWaterEntryMng_c *instance; // 0x8042A3E0
+};
+
+// no idea what this is
+class dCurtainMng_c {
+public:
+	class Sub {
+		public:
+			u16 _0;
+			u8 _2;
+			u8 _3;
+			float _4[8];
+	};
+	Sub a[4], b[4], c[4], d[4];
+
+	static dCurtainMng_c *instance; // 0x8042A180
+};
+
+
+// No idea if these actually exist or not
+class mRect {
+	public:
+		float x, y, width, height;
+};
+
+class mRect16 {
+	public:
+		short x, y, width, height;
+};
+
+
+class mMtx {
+	Mtx data;
+
+	public:
+	mMtx() { }
+
+	mMtx(float _00, float _01, float _02, float _03,
+			float _10, float _11, float _12, float _13,
+			float _20, float _21, float _22, float _23);
+
+	float* operator[](int row) { return data[row]; }
+
+	operator Mtx *() { return &data; }
+
+	/* Create New Ones */
+	void zero();
+	void identity() { MTXIdentity(data); }
+
+	void translation(float x, float y, float z) { MTXTrans(data, x, y, z); }
+	void scale(float x, float y, float z) { MTXScale(data, x, y, z); }
+
+	void rotationX(s16 *amount);
+	void rotationY(s16 *amount);
+	void rotationZ(s16 *amount);
+
+	/* Applied Manipulations */
+	void applyTranslation(float x, float y, float z) { MTXTransApply(data, data, x, y, z); }
+	void applyScale(float x, float y, float z) { MTXScaleApply(data, data, x, y, z); }
+
+	void applyRotationX(s16 *amount);
+	void applyRotationY(s16 *amount);
+	void applyRotationZ(s16 *amount);
+
+	void applyRotationYXZ(s16 *x, s16 *y, s16 *z);
+	void applyRotationZYX(s16 *x, s16 *y, s16 *z);
+
+	/* Get Stuff */
+	void getTranslation(Vec *target);
+
+	void getUnknown(S16Vec *target);
+};
+
+
+
+namespace nw4r {
+	namespace math {
+		float CosFIdx(float);
+		float SinFIdx(float);
+		void SinCosFIdx(float *s, float *c, float);
+	}
+
+namespace ut {
+	// this isn't 100% accurate because it doesn't use templates
+	// or detail::LinkListImpl, but oh well
+	// I don't need the methods anyway.
+
+	class LinkListNode {
+	public:
+		LinkListNode *next;
+		LinkListNode *prev;
+	};
+
+	class LinkList {
+	public:
+		int count;
+		LinkListNode initialNode;
+	};
+
+	class Color : public GXColor {
+		public:
+			GXColor& operator=(const GXColor &other) {
+				*((u32*)this) = *((u32*)&other);
+				return *this;
+			}
+	};
+
+	class Rect {
+	public:
+		f32 left;
+		f32 top;
+		f32 right;
+		f32 bottom;
+	};
+
+	template <class T>
+	class TagProcessorBase { };
+
+	class CharStrmReader {
+	public:
+		typedef u16 (CharStrmReader::*ReadNextCharFunc)();
+
+		void* charStrm;
+		ReadNextCharFunc readFunc;
+
+		// Set/get stream
+		void Set(void* stream) { this->charStrm = stream; }
+
+		void* GetCurrentPos() const { return this->charStrm; }
+
+		// Read a character
+		u16 Next() { return (this->*readFunc)(); }
+
+		// Stream operations
+		template <typename CharType>
+		CharType GetChar(int offset=0) const {
+			const CharType* charStrm = (const CharType*)(this->charStrm);
+			return *(charStrm + offset);
+		}
+
+		template <typename CharType>
+		void StepStrm(int step=1) {
+			const CharType*& charStrm = (const CharType*&)(this->charStrm);
+			charStrm += step;
+		}
+
+		// ReadNextCharFunc functions
+		u16 ReadNextCharUTF8();
+		u16 ReadNextCharUTF16();
+		u16 ReadNextCharCP1252();
+		u16 ReadNextCharSJIS();
+	};
+}
+
+namespace lyt {
+	class Pane; // forward declaration
+	class DrawInfo;
+
+	class AnimTransform; // I'll do these later
+	class AnimResource;
+	class AnimationLink;
+	class ResourceAccessor;
+	class Group;
+	class GroupContainer;
+
+	namespace detail {
+		class TexCoordAry {
+			public:
+				TexCoordAry();
+				void Free();
+				void Reserve(u8 count);
+				void SetSize(u8 count);
+				void Copy(const void *source, u8 count);
+
+				u8 reservedSize, usedSize;
+				void *data;
+		};
+	}
+
+	class Layout {
+	public:
+		Layout();
+		virtual ~Layout();
+
+		virtual bool Build(const void *data, ResourceAccessor *resAcc);
+
+		virtual AnimTransform *CreateAnimTransform();
+		virtual AnimTransform *CreateAnimTransform(const void *data, ResourceAccessor *resAcc);
+		virtual AnimTransform *CreateAnimTransform(const AnimResource &res, ResourceAccessor *resAcc);
+
+		virtual void BindAnimation(AnimTransform *anim);
+		virtual void UnbindAnimation(AnimTransform *anim);
+		virtual void UnbindAllAnimation();
+		virtual bool BindAnimationAuto(const AnimResource &res, ResourceAccessor *resAcc);
+
+		virtual void SetAnimationEnable(AnimTransform *anim, bool unk);
+
+		virtual void CalculateMtx(const DrawInfo &info);
+
+		virtual void/*?*/ Draw(const DrawInfo &info);
+		virtual void/*?*/ Animate(ulong flag);
+
+		virtual void/*?*/ SetTagProcessor(ut::TagProcessorBase<wchar_t> *tagProc);
+
+		ut::LinkList animations;
+
+		Pane *rootPane;
+		GroupContainer *groupContainer;
+
+		float width;
+		float height;
+	};
+
+
+	class DrawInfo {
+	public:
+		DrawInfo();
+		virtual ~DrawInfo();
+
+		Mtx matrix;
+		float left;
+		float top;
+		float right;
+		float bottom;
+		float scaleX;
+		float scaleY;
+		float alpha;
+		u8 _50; // this is actually a bitfield. todo: investigate how CW handles bitfields, and so on
+	};
+
+
+	class TexMap {
+		public:
+			void *image, *palette;
+			u16 width, height;
+			f32 minLOD, magLOD;
+			u16 lodBias, palEntryNum;
+			u32 settingsBitfield;
+
+			int getFormat() { return (settingsBitfield >> 28); }
+			void setFormat(int fmt) {
+				settingsBitfield = (fmt << 28) | (settingsBitfield & 0xFFFFFFF);
+			}
+
+			void ReplaceImage(TPLPalette *tpl, unsigned long id);
+	};
+
+	class Material {
+	public:
+		virtual ~Material();
+
+		ut::LinkList mAnimList;
+		GXColorS10 mTevCols[3];
+		GXColor mTevKCols[4];
+
+		u32 mGXMemCap; // bitfields
+		u32 mGXMemNum;
+
+		// this is actually a pointer to more stuff, not just texmaps
+		TexMap *texMaps;
+
+		char mName[21];
+		bool mbUserAllocated;
+		u8 pad[2];
+	};
+
+	class Pane {
+	public:
+		//Pane(nw4r::lyt::res::Pane const *); // todo: this struct
+		Pane(void *);
+		virtual ~Pane();
+
+		virtual void *GetRuntimeTypeInfo() const;
+		virtual void CalculateMtx(const DrawInfo &info);
+
+		virtual void Draw(const DrawInfo &info);
+		virtual void DrawSelf(const DrawInfo &info);
+		virtual void Animate(ulong flag);
+		virtual void AnimateSelf(ulong flag);
+
+		virtual ut::Color GetVtxColor(ulong id) const;
+		virtual void SetVtxColor(ulong id, ut::Color color);
+		virtual uchar GetColorElement(ulong id) const;
+		virtual void SetColorElement(ulong id, uchar value);
+		virtual uchar GetVtxColorElement(ulong id) const;
+		virtual void SetVtxColorElement(ulong id, uchar value);
+
+		virtual Pane *FindPaneByName(const char *name, bool recursive);
+		virtual Material *FindMaterialByName(const char *name, bool recursive);
+
+		virtual void/*?*/ BindAnimation(AnimTransform *anim, bool unk1, bool unk2);
+		virtual void UnbindAnimation(AnimTransform *anim, bool unk);
+		virtual void UnbindAllAnimation(bool unk);
+		virtual void UnbindAnimationSelf(AnimTransform *anim);
+
+		virtual ut::LinkListNode *FindAnimationLinkSelf(AnimTransform *anim);
+		virtual ut::LinkListNode *FindAnimationLinkSelf(const AnimResource &anim);
+
+		virtual void SetAnimationEnable(AnimTransform *anim, bool unk1, bool unk2);
+		virtual void SetAnimationEnable(const AnimResource &anim, bool unk1, bool unk2);
+
+		virtual ulong GetMaterialNum() const;
+		virtual Material *GetMaterial() const;
+		virtual Material *GetMaterial(ulong id) const;
+
+		virtual void LoadMtx(const DrawInfo &info);
+
+		void FindExtUserDataByName(const char *name);
+
+		void AppendChild(Pane *child);
+
+		ut::Rect GetPaneRect(const DrawInfo &info) const;
+
+		ut::LinkListNode *AddAnimationLink(AnimationLink *link);
+
+		Vec2 GetVtxPos() const;
+
+
+		ut::LinkListNode parentLink;
+		Pane *parent;
+
+		ut::LinkList children;
+		ut::LinkList animations;
+
+		Material *material;
+
+		Vec trans;
+		Vec rotate;
+		Vec2 scale;
+		Vec2 size;
+
+		Mtx calcMtx;
+		Mtx effectiveMtx;
+
+		float _B4;
+
+		u8 alpha;
+		u8 effectiveAlpha;
+		u8 origin;
+		u8 flag;
+
+		char name[0x11];
+		char userdata[9];
+
+		u8 paneIsOwnedBySomeoneElse;
+		u8 _D7;
+
+		void SetVisible(bool value) {
+			if (value)
+				flag |= 1;
+			else
+				flag &= ~1;
+		}
+	};
+
+	class TextBox : public Pane {
+	public:
+		TextBox(void *, void *); // todo: TextBox((res::TextBox const *,ResBlockSet const &))
+		~TextBox();
+
+		void *GetRuntimeTypeInfo() const;
+
+		void DrawSelf(const DrawInfo &info);
+
+		ut::Color GetVtxColor(ulong id) const;
+		void SetVtxColor(ulong id, ut::Color color);
+		uchar GetVtxColorElement(ulong id) const;
+		void SetVtxColorElement(ulong id, uchar value);
+
+		void LoadMtx(const DrawInfo &info);
+
+		virtual void AllocStringBuffer(u16 size);
+		virtual void FreeStringBuffer();
+
+		virtual u16 SetString(const wchar_t *str, u16 destOffset = 0);
+		virtual u16 SetString(const wchar_t *str, u16 destOffset, u16 length);
+
+		wchar_t *stringBuf;
+
+		ut::Color colour1, colour2;
+		void *font; // actually a ut::ResFont or whatever
+
+		float fontSizeX, fontSizeY;
+		float lineSpace, charSpace;
+
+		void *tagProc; // actually a TagProcessor
+
+		u16 bufferLength;
+		u16 stringLength;
+
+		u8 alignment;
+		u8 flags;
+	};
+
+	class Picture : public Pane {
+	public:
+		Picture(void *, void *); // todo: Picture((res::Picture const *,ResBlockSet const &))
+		~Picture();
+
+		void *GetRuntimeTypeInfo() const;
+
+		void DrawSelf(const DrawInfo &info);
+
+		ut::Color GetVtxColor(ulong id) const;
+		void SetVtxColor(ulong id, ut::Color color);
+		uchar GetVtxColorElement(ulong id) const;
+		void SetVtxColorElement(ulong id, uchar value);
+
+		virtual void Append(const GXTexObj &obj);
+
+		ut::Color colours[4];
+		detail::TexCoordAry texCoords;
+	};
+}
+
+
+
+namespace g3d {
+struct CameraData {
+	Mtx cameraMtx;
+	Mtx44 projectionMtx;
+
+	u32 flags;
+
+	VEC3 camPos;
+	VEC3 camUp;
+	VEC3 camTarget;
+	VEC3 camRotate;
+	float camValue;
+
+	int projectionType;
+	float fovy;
+	float aspect;
+	float near, far;
+	float top, bottom, left, right;
+
+	float _CC, _D0, _D4, _D8;
+
+	float viewportX, viewportY;
+	float viewportWidth, viewportHeight;
+	float viewportNearZ, viewportFarZ;
+
+	int scissorX, scissorY, scissorWidth, scissorHeight;
+	int scissorOffsetX, scissorOffsetY;
+};
+
+class Camera {
+public:
+	struct PostureInfo {
+		int mode;
+		VEC3 up;
+		VEC3 target;
+		VEC3 cameraRotate;
+		float cameraTwist;
+	};
+	CameraData *data;
+	Camera(CameraData *pCamera);
+	void Init();
+	void Init(u16 efbWidth, u16 efbHeight, u16 xfbWidth, u16 xfbHeight, u16 viWidth, u16 viHeight);
+	void SetPosition(const VEC3 &pos);
+	void GetPosition(VEC3 *pos) const;
+	void SetPosture(const PostureInfo &info);
+	void SetCameraMtxDirectly(const Mtx &mtx);
+	void SetPerspective(f32 fovy, f32 aspect, f32 near, f32 far);
+	void SetOrtho(f32 top, f32 bottom, f32 left, f32 right, f32 near, f32 far);
+	void SetProjectionMtxDirectly(const Mtx44 *pMtx);
+	void SetScissor(u32 xOrigin, u32 yOrigin, u32 width, u32 height);
+	void SetScissorBoxOffset(s32 xOffset, s32 yOffset);
+	void SetViewport(f32 xOrigin, f32 yOrigin, f32 width, f32 height);
+	void SetViewportZRange(f32 near, f32 far);
+	void SetViewportJitter(u32 field);
+	void GetViewport(f32 *xOrigin, f32 *yOrigin, f32 *width, f32 *height, f32 *near, f32 *far) const;
+	void GetCameraMtx(Mtx *pMtx) const;
+	void GetProjectionMtx(Mtx44 *pMtx) const;
+	void GXSetViewport() const;
+	void GXSetProjection() const;
+	void GXSetScissor() const;
+	void GXSetScissorBoxOffset() const;
+};
+
+namespace G3DState {
+	GXRModeObj *GetRenderModeObj();
+}
+}
+}
+
+
+VEC2 GetSomeSizeRelatedBULLSHIT();
+Vec CalculateSomethingAboutRatio(float, float, float, float);
+float CalculateSomethingElseAboutRatio();
+
+nw4r::g3d::CameraData *GetCameraByID(int id);
+
+// really nw4r::g3d::Camera
+int GetCurrentCamera();
+void CameraGXSetViewport(int camera);
+void CameraGXSetScissor(int camera);
+
+
+namespace EGG { class Screen; };
+void DoSomethingCameraRelatedWithEGGScreen(int id, EGG::Screen *screen);
+
+int GetCurrentCameraID(); // 80164C80
+void SetCurrentCameraID(int id); // 80164C90
+
+void LinkScene(int id); // 80164D50
+void UnlinkScene(int id); // 80164CD0
+
+void SceneCalcWorld(int sceneID); // 80164E10
+void SceneCameraStuff(int sceneID); // 80164EA0
+
+void CalcMaterial(); // 80164E90
+void DrawOpa(); // 80164F70
+void DrawXlu(); // 80164F80
+
+bool ChangeAlphaUpdate(bool enable); // 802D3270
+bool ChangeColorUpdate(bool enable); // 802D3210
+
+void DoSpecialDrawing1(); // 8006CAE0
+void DoSpecialDrawing2(); // 8006CB40
+
+void SetupLYTDrawing(); // 80163360
+void ClearLayoutDrawList(); // 801632B0
+
+void RenderAllLayouts(); // 800067A0
+void DrawAllLayoutsBeforeX(int x); // 80163440
+void DrawAllLayoutsAfterX(int x); // 801634D0
+void DrawAllLayoutsAfterXandBeforeY(int x, int y); // 80163560
+
+void RenderEffects(int v1, int v2); // 80093F10
+
+void RemoveAllFromScnRoot(); // 80164FB0
+void Reset3DState(); // 80165000
+
+extern "C" void GXDrawDone(); // 801C4FE0
+
+extern "C" u32 VIGetNextField();
+
+
+
+namespace m2d {
+	void draw(); // used for CRSIN and GAMEOVER draw funcs
+
+	class Base_c /*: public nw4r::ut::Link what's this? */ {
+	public:
+		u32 _00;
+		u32 _04;
+
+		Base_c();
+		virtual ~Base_c();
+		virtual void draw(); // don't call this directly
+
+		void scheduleForDrawing();
+
+		u8 drawOrder;
+	};
+
+	class Simple_c : public Base_c {
+	public:
+		nw4r::lyt::Layout layout;
+		nw4r::lyt::DrawInfo drawInfo;
+
+		u32 _84;
+		float _88;
+		float _8C;
+		float _90;
+		u32 _94;
+
+		Simple_c();
+		~Simple_c();
+
+		void draw();
+		virtual void _vf10();
+		virtual void _vf14();
+	};
+}
+
+// really simple when you don't need 3D
+void DrawFuncFor2dScenes() {
+    m2d::draw();
+}
+
+namespace EGG {
+	class Frustum {
+	public:
+		int projType; // 0 = ortho, 1 = perspective.. who needs GXEnum.hpp anyway
+		int isCentered;
+		float width;
+		float height;
+		float fovy;
+		float dunno;
+		float near;
+		float far;
+		float center_x_maybe;
+		float center_y_maybe;
+		float horizontalMultiplier;
+		float verticalMultiplier;
+		float unk3;
+		short some_flag_bit;
+
+
+		// isCentered might actually be isNotCentered, dunno
+		Frustum(u32 projType, Vec2 size, bool isCentered, float near, float far); // 802C6D20
+		Frustum(Frustum &f); // 802C6D90
+		virtual ~Frustum(); // 802C75F0
+
+		virtual void loadDirectly(); // 802C7050
+		virtual void loadIntoCamera(nw4r::g3d::Camera cam); // 802C7070
+
+		void setOrtho(float top, float bottom, float left, float right, float near, float far); // 802C6DD0
+
+		void setFovy(float newFovy); // 802C6F60
+
+		void getCenterPointsBasedOnPos(float x, float y, float *destX, float *destY); // 802C6FD0
+
+		// no idea what this does
+		float getSomethingForPerspective(float blah); // 802C7020
+
+
+	protected:
+		// not all of these might be protected, dunno
+
+		void copyAllFields(Frustum &f); // 802C6EE0
+
+		static void saveSomething(float f1, float f2, float f3, float f4); // 802C70C0
+		static void restoreSomething(float *f1, float *f2, float *f3, float *f4); // 802C70E0
+
+		void loadPerspective(); // 802C7110
+		void loadOrtho(); // 802C7140
+
+		void setCameraPerspective(nw4r::g3d::Camera cam); // 802C7170
+		void setCameraOrtho(nw4r::g3d::Camera cam); // 802C71E0
+
+		void getPerspectiveProjMtx(Mtx44 *mtx); // 802C7250
+		void getPerspectiveProjv(float *ptr); // 802C72E0
+		void getOrthoProjv(float *ptr); // 802C73A0
+
+		void getOrthoVars(float *top, float *bottom, float *left, float *right); // 802C7480
+	};
+
+
+	class Screen : public Frustum {
+		public:
+			struct Info {
+				float viewportX, viewportY, viewportWidth, viewportHeight;
+				float viewportNearZ, viewportFarZ;
+
+				int scissorX, scissorY, scissorWidth, scissorHeight;
+				int scissorOffsetX, scissorOffsetY;
+			};
+
+			Screen(); // 802D0FB0; creates perspective screen with basic settings
+			Screen(Screen *pParent, bool isCentered, float m40, float m44, float width, float height); // 802D1080
+			Screen(Screen &s); // 802D1140
+
+			~Screen(); // not called by the retail game.. dunno how to make CodeWarrior do this, who gives a fuck
+
+			void loadDirectly();
+			void loadIntoCamera(nw4r::g3d::Camera cam);
+
+			void setSomeVars(bool isCentered, float m40, float m44, float width, float height); // 802D1500
+
+			Info *getStructContainingInfo(); // 802D1AB0
+
+			void doSomethingWithAPassedMatrix(Mtx m, float f1, float f2, float f3, float f4); // 802D1B40
+
+		//protected:
+			void copyAllFields(Screen &s); // 802D1430
+			void setParent(Screen *pParent = 0); // 802D1540
+
+			void useScreenWidth640(); // 802D15A0
+			void calculateCrap(); // 802D15D0
+
+			bool checkIfFlag1IsSet(); // 802D1B10
+
+
+			Screen *parent; // I think it's the parent screen, anyway ...
+			float _40, _44, _48, _4C, _50, _54;
+			Info info;
+	};
+
+
+	class LookAtCamera /* : public BaseCamera */ {
+		public:
+			virtual Mtx *getMatrix();
+			virtual Mtx *getMatrixAgain();
+			virtual void callCalculateMatrix();
+			virtual void calculateMatrix();
+			virtual void loadMatricesIntoGX();
+			virtual void _vf1C(); // null
+			virtual Vec getCamPos();
+			virtual void doStuffInvolvingVfsAndOtherObject(void *unkType);
+			virtual void _vf28(); // null
+			virtual Mtx *getPreviousMatrix();
+
+			void assignToNW4RCamera(nw4r::g3d::Camera &cam); // 802BEB70
+			Vec getStuffFromMatrix(); // 802BEBC0
+			Vec getMoreStuffFromMatrix(); // 802BEC20
+			Vec getEvenMoreStuffFromMatrix(); // 802BEC80
+
+		private:
+			Mtx matrix;
+			Mtx previousMatrix;
+
+		public:
+			Vec camPos, target, camUp;
+	};
+
+	class ProjectOrtho /* : public something? */ {
+		public:
+			virtual u32 getProjectionType();
+			virtual void setGXProjection();
+			virtual void _vf10(); // null
+			virtual VEC2 _vf14(VEC2 *something);
+			virtual Vec _vf18(float something, /*BaseCamera?*/ LookAtCamera *camera);
+			virtual Vec _vf1C(float something, /*BaseCamera?*/ LookAtCamera *camera);
+			virtual Vec _vf20(VEC2 *something);
+			virtual void _vf24();
+			virtual void setOrthoOntoCamera(nw4r::g3d::Camera &cam);
+			virtual void _vf2C(); // null
+			virtual void setGXProjectionUnscaled(); // does not take aspect ratio into account
+
+			ProjectOrtho(); // 802BF6C0
+			void setVolume(float top, float bottom, float left, float right); // 802BF710
+			void setDefaults(); // I think? 802BF830
+
+			Mtx44 matrix; // unused? dunno
+			void *_44; // dunno type
+			float near, far, top, bottom, left, right;
+	};
+}
+
+
+class TileRenderer {
+public:
+	TileRenderer();
+	~TileRenderer();
+
+	TileRenderer *previous, *next;
+	u16 tileNumber;
+	u8 unkFlag, someBool;
+	float x, y, z;
+	float scale;
+	s16 rotation;
+	u8 unkByte;
+
+	u16 getTileNum();
+	bool getSomeBool();
+	void setSomeBool(u8 value);
+
+	float getX();
+	float getY();
+	float getZ();
+	void setPosition(float x, float y);
+	void setPosition(float x, float y, float z);
+
+	u8 getUnkFlag();
+
+	void setVars(float scale); // sets unkFlag=1, rotation=0, unkByte=0
+	void setVars(float scale, s16 rotation); // sets unkFlag=2, unkByte=0
+
+	float getScale();
+	float getRotationFloat();
+	s16 getRotation();
+
+	u8 getUnkByte();
+
+	class List {
+	public:
+		u32 count;
+		TileRenderer *first, *last; // order?
+
+		void add(TileRenderer *r);
+		void remove(TileRenderer *r);
+		void removeAll();
+
+		List();
+		~List();
+	};
+};
+
+class dActor_c; // forward declaration
+class dStageActor_c; // forward declaration
+
+class Physics {
+public:
+	struct Unknown {
+		Unknown();
+		~Unknown();
+
+		float x, y;
+	};
+
+	struct Info {
+		float x1, y1, x2, y2; // Might be distance to center/edge like APhysics
+		void *otherCallback1, *otherCallback2, *otherCallback3;
+	};
+
+	Physics();
+	~Physics();
+
+	dActor_c *owner;
+	Physics *next, *prev;
+	u32 _C, _10, _14, _18, _1C, _20, _24, _28, _2C, _30, _34;
+	void *somePlayer;
+	u32 _3C;
+	void *otherCallback1, *otherCallback2, *otherCallback3;
+	void *callback1, *callback2, *callback3;
+	float lastX, lastY;
+	Unknown unkArray[4];
+	float x, y;
+	float _88, _8C;
+	float diameter;
+	Vec lastActorPosition;
+	float _A0, _A4, last_A0, last_A4, _B0, _B4;
+	u32 _B8;
+	s16 *ptrToRotationShort;
+	s16 currentRotation;
+	s16 rotDiff;
+	s16 rotDiffAlt;
+	u32 isRound;
+	u32 _CC;
+	// Flag 4 is icy
+	u32 flagsMaybe;
+	u32 _D4, _D8;
+	u8 isAddedToList, _DD, layer;
+	u32 id;
+
+	void addToList();
+	void removeFromList();
+
+	void baseSetup(dActor_c *actor, void *otherCB1, void *otherCB2, void *otherCB3, u8 t_DD, u8 layer);
+
+	// note: Scale can be a null pointer (in that case, it'll use 1.0)
+	void setup(dActor_c *actor,
+			float x1, float y1, float x2, float y2,
+			void *otherCB1, void *otherCB2, void *otherCB3,
+			u8 t_DD, u8 layer, Vec2 *scale = 0);
+
+	void setup(dActor_c *actor,
+			Vec2 *p1, Vec2 *p2,
+			void *otherCB1, void *otherCB2, void *otherCB3,
+			u8 t_DD, u8 layer, Vec2 *scale = 0);
+
+	void setup(dActor_c *actor, Info *pInfo, u8 t_DD, u8 layer, Vec2 *scale = 0);
+
+	// radius might be diameter? dunno
+	void setupRound(dActor_c *actor,
+			float x, float y, float radius,
+			void *otherCB1, void *otherCB2, void *otherCB3,
+			u8 t_DD, u8 layer, Vec2 *scale = 0);
+
+	void setRect(float x1, float y1, float x2, float y2, Vec2 *scale = 0);
+	void setRect(Vec2 *p1, Vec2 *p2, Vec2 *scale = 0);
+
+	void setX(float value);
+	void setY(float value);
+	void setWidth(float value);
+	void setHeight(float value);
+
+	void setPtrToRotation(s16 *ptr);
+
+	void update();
+
+	static Physics *globalListHead;
+	static Physics *globalListTail;
+	// todo: more stuff that might not be relevant atm
+};
+
+
+class ActivePhysics {
+public:
+	struct Info; // forward declaration
+	typedef void (*Callback)(ActivePhysics *self, ActivePhysics *other);
+
+	struct Info {
+		float xDistToCenter;
+		float yDistToCenter;
+		float xDistToEdge;
+		float yDistToEdge;
+		u8 category1;
+		u8 category2;
+		u32 bitfield1;
+		u32 bitfield2;
+		u16 unkShort1C;
+		Callback callback;
+	};
+
+	ActivePhysics();
+	virtual ~ActivePhysics();
+
+	dStageActor_c *owner;
+	u32 _8;
+	u32 _C;
+	ActivePhysics *listPrev, *listNext;
+	u32 _18;
+	Info info;
+	float trpValue0, trpValue1, trpValue2, trpValue3;
+	float firstFloatArray[8];
+	float secondFloatArray[8];
+	Vec2 positionOfLastCollision;
+	u16 result1;
+	u16 result2;
+	u16 result3;
+	u8 collisionCheckType;
+	u8 chainlinkMode;
+	u8 layer;
+	u8 someFlagByte;
+	u8 isLinkedIntoList;
+
+	void clear();
+	void addToList();
+	void removeFromList();
+
+	void initWithStruct(dActor_c *owner, const Info *info);
+	void initWithStruct(dActor_c *owner, const Info *info, u8 clMode);
+
+	u16 checkResult1(u16 param);
+	u16 checkResult3(u16 param);
+
+	float top();
+	float bottom();
+	float yCenter();
+	float right();
+	float left();
+	float xCenter();
+
+	// Plus more stuff that isn't needed in the public API, I'm pretty sure.
+
+	static ActivePhysics *globalListHead;
+	static ActivePhysics *globalListTail;
+};
+
+
+#include <statelib.hpp>
+
+class dActorState_c;
+class dActorMultiState_c;
+
+
+template <class TOwner>
+class dStateWrapperBase_c {
+public:
+	dStateWrapperBase_c(TOwner *pOwner) :
+		manager(&pointless, &executor, &dStateBase_c::mNoState), executor(pOwner) { }
+
+	dStateWrapperBase_c(TOwner *pOwner, dState_c<TOwner> *pInitState) :
+		manager(&pointless, &executor, pInitState), executor(pOwner) { }
+
+	virtual ~dStateWrapperBase_c() { }
+
+	dStatePointless_c pointless;
+	dStateExecutor_c<TOwner> executor;
+
+	dStateMgr_c manager;
+
+	// All these are passed straight through to the manager
+	virtual void ensureStateHasBegun() { manager.ensureStateHasBegun(); }
+	virtual void execute() { manager.execute(); }
+	virtual void endCurrentState() { manager.endCurrentState(); }
+	virtual void setState(dStateBase_c *pNewState) { manager.setState(pNewState); }
+	virtual void executeNextStateThisTick() { manager.executeNextStateThisTick(); }
+	virtual dStateMethodExecutorBase_c *getCurrentStateMethodExecutor() { return manager.getCurrentStateMethodExecutor(); }
+	virtual dStateBase_c *getNextState() { return manager.getNextState(); }
+	virtual dStateBase_c *getCurrentState() { return manager.getCurrentState(); }
+	virtual dStateBase_c *getPreviousState() { return manager.getPreviousState(); }
+};
+
+template <class TOwner>
+class dStateWrapper_c : public dStateWrapperBase_c<TOwner> {
+public:
+	dStateWrapper_c(TOwner *pOwner) :
+		dStateWrapperBase_c<TOwner>(pOwner) { }
+
+	dStateWrapper_c(TOwner *pOwner, dState_c<TOwner> *pInitState) :
+		dStateWrapperBase_c<TOwner>(pOwner, pInitState) { }
+
+	~dStateWrapper_c() { }
+};
+
+class MultiStateMgrBase {
+public:
+	virtual ~MultiStateMgrBase();
+
+	dStateWrapper_c<dActorMultiState_c> s1, s2;
+	dStateWrapper_c<dActorMultiState_c> *ptrToStateMgr;
+
+	virtual void ensureStateHasBegun(); // calls vfC on ptrToStateMgr
+	virtual void execute(); // calls vf10 on ptrToStateMgr
+	virtual void endCurrentState(); // if (isSecondStateMgr()) { disableSecond(); } else { ptrToStateMgr->_vf14(); }
+	virtual void setState(dStateBase_c *state); // calls vf18 on ptrToStateMgr
+	virtual void executeNextStateThisTick(); // calls vf1C on ptrToStateMgr
+	virtual dStateMethodExecutorBase_c *getCurrentStateMethodExecutor(); // calls vf20 on ptrToStateMgr
+	virtual dStateBase_c *getNextState(); // calls vf24 on ptrToStateMgr
+	virtual dStateBase_c *getCurrentState(); // calls vf28 on ptrToStateMgr
+	virtual dStateBase_c *getPreviousState(); // calls vf2C on ptrToStateMgr
+	virtual void enableSecondWithState(dStateBase_c *state); // sets ptrToStateMgr to s2, calls vf18 on it
+	virtual void disableSecond(); // if (isSecondStateMgr()) { ptrToStateMgr->vf14(); ptrToStateMgr = &s1; }
+	virtual bool isSecondStateMgr();
+	virtual dStateBase_c *getCurrentStateFromFirst(); // calls vf28 on s1
+};
+
+class MultiStateMgr : public MultiStateMgrBase {
+public:
+	// what the fuck does this do
+	~MultiStateMgr();
+};
+
+#define REF_NINTENDO_STATE(NAME) \
+	static State StateID_##NAME;
+
+#define DECLARE_STATE(NAME) \
+	static State StateID_##NAME; \
+	void beginState_##NAME(); \
+	void executeState_##NAME(); \
+	void endState_##NAME();
+
+#define DECLARE_STATE_VIRTUAL(NAME) \
+	static State StateID_##NAME; \
+	virtual void beginState_##NAME(); \
+	virtual void executeState_##NAME(); \
+	virtual void endState_##NAME();
+
+#define CREATE_STATE(CLASS, NAME) \
+	CLASS::State CLASS::StateID_##NAME \
+		(#CLASS "::StateID_" #NAME, \
+		&CLASS::beginState_##NAME, \
+		&CLASS::executeState_##NAME, \
+		&CLASS::endState_##NAME);
+
+#define CREATE_STATE_E(CLASS, NAME) \
+	CREATE_STATE(CLASS, NAME) \
+	void CLASS::beginState_##NAME() { } \
+	void CLASS::endState_##NAME() { }
+
+#define USING_STATES(CLASS) \
+	typedef dState_c<CLASS> State;
+
+
+struct LinkListEntry {
+	LinkListEntry *prev;
+	LinkListEntry *next;
+	void *owned_obj;
+};
+
+
+struct LinkList {
+	LinkListEntry *first;
+	LinkListEntry *last;
+	// PTMF goes here, but I don't know how to represent it
+};
+
+
+struct OrderedLinkListEntry : LinkListEntry {
+	u16 order;
+	u16 _;
+};
+
+
+struct TreeNode {
+	TreeNode *parent;
+	TreeNode *child;
+	TreeNode *prev;
+	TreeNode *next;
+	void *owned_obj;
+};
+
+
+struct Tree {
+	TreeNode *firstNode;
+	// PTMF goes here, but I don't know how to represent it
+};
+
+
+typedef bool (*ChainedFunc)(void*);
+
+// aka sPhase_c
+class FunctionChain {
+public:
+	ChainedFunc *functions;
+	u16 count;
+	u16 current;
+
+	void setup(ChainedFunc *functions, u16 count); // 8015F740
+};
+
+
+class dStageActor_c;	// forward declaration
+
+enum SensorFlags {
+	SENSOR_POINT = 0,
+	SENSOR_LINE = 1,
+
+	SENSOR_TYPE_MASK = 1,
+	SENSOR_2 = 2, // has not shown up yet...?
+	SENSOR_IGNORE_SIMPLE_COLL = 4,
+	SENSOR_8 = 8, // can enter pipe?
+	SENSOR_10 = 0x10, // Related to ice
+	SENSOR_20 = 0x20, // related to ice, too
+	SENSOR_40 = 0x40, // checked by simplecollider
+	SENSOR_80 = 0x80, // checked by simplecollider
+	SENSOR_100 = 0x100, // checked by simplecollider
+	SENSOR_200 = 0x200, // checked by simplecollider
+	SENSOR_400 = 0x400, // checked by simplecollider
+	SENSOR_800 = 0x800, // checked by simplecollider
+	SENSOR_NO_QUICKSAND = 0x1000,
+	SENSOR_2000 = 0x2000, // something to do with fences maybe?
+	SENSOR_BREAK_BLOCK = 0x4000,
+	SENSOR_8000 = 0x8000, // used
+	SENSOR_10000 = 0x10000, // used
+	SENSOR_COIN_1 = 0x20000,
+	SENSOR_COIN_2 = 0x40000,
+	SENSOR_COIN_OUTLINE = 0x80000,
+	SENSOR_ACTIVATE_QUESTION = 0x100000,
+	SENSOR_ACTIVATE_DONUTS = 0x200000,
+	SENSOR_HIT_BRICK = 0x400000,
+	SENSOR_BREAK_BRICK = 0x800000,
+	SENSOR_HIT_OR_BREAK_BRICK = 0xC00000,
+	SENSOR_1000000 = 0x1000000, // has not shown up yet...?
+	SENSOR_2000000 = 0x2000000, // corresponds to SCF_400?
+	SENSOR_4000000 = 0x4000000, // something related to hitting blocks
+	SENSOR_8000000 = 0x8000000, // corresponds to SCF_20?
+	SENSOR_10000000 = 0x10000000, // used
+	SENSOR_20000000 = 0x20000000, // used
+	SENSOR_40000000 = 0x40000000, // used
+	SENSOR_80000000 = 0x80000000, // used
+};
+
+// Output is split into...
+// Above   :
+// FC000000: 11111100000000000000000000000000
+// Below   :
+//  3FFE000:       11111111111110000000000000
+//   1FE000:            111111110000000000000
+//    18000:                11000000000000000
+// Adjacent:
+//     1FFF:                    1111111111111
+
+enum SensorOutputFlags {
+	CSOUT_ABOVE_ALL = 0xFC000000,
+	CSOUT_BELOW_ALL = 0x3FFE000,
+	CSOUT_ADJACENT_ALL = 0x1FFF,
+};
+
+// 0x8000 : Has object from Class 2DC?
+// 0x4000 : Has slope from Class 2DC?
+
+struct hLine_s {
+	float x1, x2, y;
+};
+struct vLine_s {
+	float x, y1, y2;
+};
+
+struct pointSensor_s;
+struct lineSensor_s;
+struct sensorBase_s {
+	u32 flags;
+	inline pointSensor_s *asPoint() const {
+		return (pointSensor_s*)this;
+	}
+	inline lineSensor_s *asLine() const {
+		return (lineSensor_s*)this;
+	}
+};
+struct pointSensor_s : sensorBase_s {
+	inline pointSensor_s() { }
+	inline pointSensor_s(s32 _x, s32 _y) {
+		x = _x; y = _y;
+	}
+	inline pointSensor_s(u32 _flags, s32 _x, s32 _y) {
+		flags = _flags | SENSOR_POINT;
+		x = _x; y = _y;
+	}
+	s32 x, y;
+};
+struct lineSensor_s : sensorBase_s {
+	inline lineSensor_s() { }
+	inline lineSensor_s(s32 _a, s32 _b, s32 _d) {
+		flags = SENSOR_LINE;
+		lineA = _a; lineB = _b;
+		distanceFromCenter = _d;
+	}
+	inline lineSensor_s(u32 _flags, s32 _a, s32 _b, s32 _d) {
+		flags = _flags | SENSOR_LINE;
+		lineA = _a; lineB = _b;
+		distanceFromCenter = _d;
+	}
+	s32 lineA, lineB, distanceFromCenter;
+};
+
+class collisionMgr_c {
+	public:
+		collisionMgr_c();
+		virtual ~collisionMgr_c();
+
+		dStageActor_c *owner;
+		sensorBase_s *pBelowInfo, *pAboveInfo, *pAdjacentInfo;
+
+		VEC3 *pPos, *pLastPos, *pSpeed;
+		VEC3 specialSpeedOffset;
+		float xDeltaMaybe, yDeltaMaybe;
+		float _34, _38;
+		u32 _3C, _40, _44, _48;
+		float initialXAsSetByJumpDai;
+		/*dClass2DC_c*/void *pClass2DC;
+		u32 _54;
+		Physics *sCollBelow;
+		Physics *sCollAbove;
+		Physics *sCollAdjacentLast, *sCollAdjacent[2];
+		collisionMgr_c *_6C, *_70, *_74;
+		collisionMgr_c *_78[2];
+		Physics *_80[2];
+		u32 outputMaybe;
+		u32 _8C;
+		u32 someStoredBehaviourFlags, someStoredProps;
+		char whichPlayerOfParent____;
+		char whichController____;
+		u16 _9A, _9C;
+		u32 tileBelowProps;
+		u8 tileBelowSubType, lastTileBelowSubType;
+		u32 tileAboveProps;
+		u8 tileAboveSubType, lastTileAboveSubType;
+		u32 adjacentTileProps[2];
+		u8 adjacentTileSubType[2];
+		u8 _BA, _BB;
+		u8 _BC; // &8 makes able to enter mini pipes?
+		u8 currentSlopeType;
+		s16 currentSlopeAngle;
+		u8 currentFlippedSlopeType;
+		s16 currentFlippedSlopeAngle;
+		u32 _C4;
+		u16 currentAdjacentSlopeAngle;
+		u32 currentFenceType; // 0=null 1=ladder 2=fence
+		Physics *_D0;
+		float _D4;
+		float _D8;
+		float _DC;
+		u8 touchedSpikeFlag;
+		s8 maxTouchedSpikeType;
+		u8 currentSlopeDirection, _E3, onGround_maybe, chainlinkMode;
+		u8 *pLayerID;
+		u8 layer;
+		bool enteredPipeIsMini;
+
+		// Setup
+		void clear1();
+		void clear2();
+		void init(dStageActor_c *owner, const sensorBase_s *belowInfo, const sensorBase_s *aboveInfo, const sensorBase_s *adjacentInfo);
+
+		u32 calculateBelowCollision();
+		u32 calculateAboveCollision(u32 value);
+		u32 calculateAdjacentCollision(float *pFloat=0);
+
+		bool setBelowSubType(u32 magic); // maybe not public?
+
+		u8 getBelowSubType();
+		u8 getAboveSubType();
+		u8 getAdjacentSubType(int direction);
+
+		int returnSomethingBasedOnSlopeAngle();
+		bool doesSlopeGoUp();
+
+		int getSlopeYDirectionForXDirection(int direction);
+		int getSlopeYDirectionForXDirection(int direction, int slopeType);
+		s16 getAngleOfSlopeInDirection(int direction);
+		s16 getAngleOfSlopeWithXSpeed(float xSpeed);
+		s16 getAngleOfSlopeInDirection2(int thing);
+		s16 getAngleOfFlippedSlopeInDirection(int thing);
+		s16 getAngleOfFlippedSlopeInDirection2(int thing);
+
+		static bool checkPositionForTileOrSColl(float x, float y, u8 layer, u32 unk, u32 mask);
+		static int getPartialBlockExistenceAtPos(float x, float y, u8 layer);
+		static bool isPartialBlockOrBlockSolidAtPos(float x, float y, u8 layer);
+		static u32 getTileBehaviour1At(float x, float y, u8 layer);
+		static u32 getTileBehaviour2At(float x, float y, u8 layer);
+		static u32 getTileBehaviour1At(u16 x, u16 y, u8 layer);
+		static u32 getTileBehaviour2At(u16 x, u16 y, u8 layer);
+
+		u8 getOwnerStageActorType() const;
+		u32 returnOutputAnd18000() const;
+		bool isOnTopOfTile() const;
+
+		u32 s_80071210(dStageActor_c *player);
+		bool tryToEnterPipeBelow(VEC3 *pOutVec, int *pOutEntranceID);
+		bool tryToEnterPipeAbove(VEC3 *pOutVec, int *pOutEntranceID);
+		bool tryToEnterAdjacentPipe(VEC3 *pOutVec, int unk, int *pOutEntranceID, float fp1, float fp2);
+		u32 detectFence(lineSensor_s *info);
+		bool detectClimbingPole(lineSensor_s *info);
+
+		bool s_80072440(VEC2 *v2one, VEC2 *v2two, float *pOutFloat);
+		bool s_800728C0(VEC2 *vecParam, float *pOutFloat);
+
+		u32 calculateBelowCollisionWithSmokeEffect();
+
+		u32 calculateAdjacentCollisionAlternate(float *pFloat=0);
+
+		static void setupEverything(int wrapType);
+
+		bool getBelowSensorHLine(hLine_s *outLine);
+		bool getAboveSensorHLine(hLine_s *outLine);
+		bool getAdjacentSensorVLine(vLine_s *outLine, int direction);
+
+		void s_800731E0(Physics *sColl, VEC3 *somePos);
+
+		void clearStoredSColls();
+		void s_80075090();
+		bool s_800751C0(Physics *sColl, collisionMgr_c *what);
+		collisionMgr_c *s_80075230(Physics *sColl);
+
+		static int checkPositionForLiquids(float x, float y, int layer, float *unkDestFloat = 0);
+		static int s_80075560(float x, float y, int layer, float *destFloat);
+		static bool s_80075750(VEC2 *pVec);
+		static bool s_80075780(s16 *pAngle);
+
+		static bool sub_800757B0(VEC3 *vec, float *what, u8 layer, int p6, char p7);
+
+
+		enum SlopeTypes {
+			SLOPE_EDGE = 10,
+			SLOPE_TYPE_COUNT = 19
+		};
+		struct slopeParams_s {
+			float basePos, colHeight;
+		};
+		static const slopeParams_s slopeParams[SLOPE_TYPE_COUNT];
+		static const slopeParams_s flippedSlopeParams[SLOPE_TYPE_COUNT];
+		static const u8 slopeKinds[SLOPE_TYPE_COUNT];
+		static const u8 slopeDirections[SLOPE_TYPE_COUNT];
+};
+
+class BasicCollider {
+	public:
+		BasicCollider();
+
+		virtual ~BasicCollider();
+		virtual void update();
+		virtual void _vf10();
+		virtual void _vf14();
+
+		void clear();
+		void addToList();
+		void removeFromList();
+
+
+		dStageActor_c *owner;
+		BasicCollider *next, *prev;
+		/* dRSomething */ void *ptrToRSomething;
+
+		float rightX, rightY, leftX, leftY;
+		float xDiff, yDiff;
+		float lastLeftX, lastLeftY;
+		float lineLength;
+		float leftXDeltaSinceLastCalculation;
+
+		u32 flags;
+		s16 rotation;
+		u8 type;
+		u8 _43;
+		u8 isInList;
+		u8 _45, _46, _47, _48, _49, _4A;
+
+		static BasicCollider *globalListHead;
+};
+
+class StandOnTopCollider : public BasicCollider {
+	public:
+		StandOnTopCollider();
+
+		void update();
+
+		void init(dStageActor_c *owner,
+				float _4C, float _50, float topYOffset,
+				float rightSize, float leftSize,
+				s16 rotation, u8 unk_45, Vec2 *scale = 0);
+
+		// void init(dStageActor_c *owner,
+		// 		Vec2 *fields4C_50, float topYOffset,
+		// 		float rightSize, float leftSize,
+		// 		s16 rotation, u8 unk_45, Vec2 *scale = 0);
+
+		void setLeftAndRight(float left, float right);
+		void setLeftAndRightScaled(float left, float right, float scaleFactor);
+
+		// 4C and 50 might be X/Y offset. Not affected by rotation
+		float _4C, _50, topYOffset, rightSize, leftSize;
+};
+
+class RideableActorCollider : public BasicCollider {
+	public:
+		RideableActorCollider();
+
+		void update();
+
+		void init(dStageActor_c *owner, Vec2 *one, Vec2 *two); // 800DB590
+		void init(dStageActor_c *owner, float x1, float y1, float x2, float y2); // 800DB620
+
+		void setPosition(Vec2 *one, Vec2 *two); // 800DB680
+		void setPosition(float x1, float y1, float x2, float y2); // 800DB6E0
+
+		Vec2 left, right;
+};
+
+
+class freezeMgr_c {
+public:
+	u32 some_count;
+	u32 ice_timer1;
+	u32 ice_timer2;
+	u32 _mstate;				//0=not,1=frozen,3=die_coin
+	u32 _10;
+	u32 _nstate;				//1=countdown,2=meltedNormal
+	u32 spawns_coin;			//1=delete,3=coin
+	u32 _1C_timerLenType;
+	u32 _20_defaultTimerLenType;
+	u32 _24;
+	u32 _28;
+	u32 perm_freeze;
+	u32 _30;
+	u32 actorIds[12];
+	void* owner;		// _64
+
+	freezeMgr_c();
+	~freezeMgr_c();
+	//FIXME add params and returns
+	void doSomethingCool1();
+	void doSomethingCool2();
+	void setSomething(u32,u32,u32);
+	bool Create_ICEACTORs(void*,int);
+	void Delete_ICEACTORs();
+	void SetIceTimer_pt1();
+	void SetIceTimer_pt2();
+	void CheckIceTimer_lte_Value();
+	void doSomethingCool3();
+	void doSomethingCool4();
+	void doSomethingCool5();
+	void doSomethingCool6();
+	void DoMeltNormal();
+	void doSomethingCool7();
+	void CheckCountdownTimer();
+};
+
+
+class StageActorLight {
+public:
+
+	virtual void init(void *allocator, int);
+	virtual void update();
+	virtual void draw();
+	// virtual ~StageActorLight();
+
+	Vec pos;
+	float size;
+	u32 secondClass;
+	u32 firstClass;
+};
+
+namespace EGG {
+	class Disposer {
+		public:
+			void *vtable;
+			void *mContainerHeap; // Heap
+			void *mLink; // Link
+	};
+
+	class Heap : public Disposer {
+        void *mHeapHandle;
+		void *mParentBlock;
+		void *mParentHeap;
+        u16 mFlag;
+        u8 pad[2];
+        void *mLink;
+        void *mList;
+        char *mName;
+	};
+};
+
+class fBase_c {
+public:
+	u32 id;
+	u32 settings;
+	union {
+		u16 name;
+		u16 profileId;
+	};
+	bool isCreated;
+	bool isDeleted;
+	bool wasNotDeferred;
+	bool isDeferred; // "wasCreationDelayed"
+	u8 base_type;
+	u8 _F;
+	TreeNode link_connect;
+	OrderedLinkListEntry link_execute;
+	OrderedLinkListEntry link_draw;
+	LinkListEntry link_IDlookup;
+	u32 _50;
+	u32 _54;
+	u32 _58;
+	EGG::Heap *heap;
+
+	fBase_c();
+
+	virtual int onCreate();
+	virtual int beforeCreate();
+	virtual int afterCreate(int);
+
+	virtual int onDelete();
+	virtual int beforeDelete();
+	virtual int afterDelete(int);
+
+	virtual int onExecute();
+	virtual int beforeExecute();
+	virtual int afterExecute(int);
+
+	virtual int onDraw();
+	virtual int beforeDraw();
+	virtual int afterDraw(int);
+
+	virtual void willBeDeleted();
+
+	virtual bool moreHeapShit(u32 size, void *parentHeap);
+	virtual bool createHeap(u32 size, void *parentHeap);
+	virtual void heapCreated();
+
+	virtual ~fBase_c();
+
+	void Delete();
+
+	fBase_c *GetParent();
+	fBase_c *GetChild();
+	fBase_c *GetNext();
+
+	bool hasUninitialisedProcesses();	// 80162B60
+	fBase_c *findNextUninitialisedProcess();
+
+	static fBase_c *searchByProfileId(u16 profileId, fBase_c *previous = 0);
+	static fBase_c *searchById(u32 id);
+	static fBase_c *searchByBaseType(int type, fBase_c *previous);
+};
+
+class dBase_c : public fBase_c {
+public:
+	u32 _64;
+	const char *explanation_string;
+	const char *name_string;
+
+	dBase_c();
+
+	int beforeCreate();
+	int afterCreate(int);
+	int beforeDelete();
+	int afterDelete(int);
+	int beforeExecute();
+	int afterExecute(int);
+	int beforeDraw();
+	int afterDraw(int);
+
+	~dBase_c();
+
+	virtual const char *GetExplanationString();
+};
+
+class dScene_c : public dBase_c {
+public:
+	FunctionChain *ptrToInitChain;
+
+	dScene_c();
+
+	int beforeCreate();
+	int afterCreate(int);
+	int beforeDelete();
+	int afterDelete(int);
+	int beforeExecute();
+	int afterExecute(int);
+	int beforeDraw();
+	int afterDraw(int);
+
+	~dScene_c();
+
+
+	void setInitChain(FunctionChain &initChain) {
+		ptrToInitChain = &initChain;
+	}
+};
+
+class dActor_c : public dBase_c {
+public:
+	LinkListEntry link_actor;
+	mMtx matrix;
+	Vec pos;
+	Vec last_pos;
+	Vec pos_delta;
+	Vec pos_delta2;
+	Vec scale;
+	Vec speed;
+	Vec max_speed;
+	S16Vec rot;
+	S16Vec _106;
+	u32 _10C;
+	u32 _110;
+	float y_speed_inc;
+	u32 _118;
+	float x_speed_inc;
+	u32 _120;
+	bool visible;
+
+	dActor_c();
+
+	virtual void specialDraw1();
+	virtual void specialDraw2();
+	virtual int _vf58();
+	virtual void _vf5C();
+
+	~dActor_c();
+
+	void UpdateObjectPosBasedOnSpeedValuesReal();
+	void HandleXSpeed();
+	void HandleYSpeed();
+	static dActor_c* create(Actors type, u32 settings, VEC3 *pos, void *rot);
+};
+
+class dStageActor_c : public dActor_c {
+public:
+	enum StageActorType {
+		NormalType, PlayerType, YoshiType, EntityType
+	};
+
+	u8 _125;
+	u32 _128, _12C, directionForCarry, _134, _138, _13C;
+	float _140;
+	u32 _144;
+	ActivePhysics aPhysics;
+	collisionMgr_c collMgr;
+	u8 classAt2DC[0x34];
+	float _310, _314;
+	float spriteSomeRectX, spriteSomeRectY;
+	float _320, _324, _328, _32C, _330, _334, _338, _33C, _340, _344;
+	u8 direction;
+	u8 currentZoneID;
+	u8 _34A, _34B;
+	u8 *spriteByteStorage;
+	u16 *spriteShortStorage;
+	union {
+		u16 spriteFlagNum;
+		struct {
+			u8 eventId2; // nybble 1-2
+			u8 eventId1; // nybble 3-4
+		};
+	};
+	u64 spriteFlagMask; // 0 if both eventId2 and eventId1 are 0, otherwise "1ULL << ((eventId2 ? eventId2 : eventId1) - 1)"
+	u32 _360;
+	u16 spriteSomeFlag;
+	u8 _366, _367;
+	u32 _368;
+	u8 eatenState;	// 0=normal,2=eaten,4=spit out
+	u8 _36D;
+	Vec scaleBeforeBeingEaten;
+	u32 _37C, lookAtMode, _384, _388;
+	u8 stageActorType;
+	u8 which_player;		// _38D
+	u8 disableFlagMask, currentLayerID;
+	u8 deleteForever;
+	u8 appearsOnBackFence, _392, _padding;
+
+	dStageActor_c();
+
+	int beforeCreate();
+	int afterCreate(int);
+	int beforeDelete();
+	int afterDelete(int);
+	int beforeExecute();
+	int afterExecute(int);
+	int beforeDraw();
+	int afterDraw(int);
+
+	const char *GetExplanationString();
+
+	virtual bool isOutOfView(); // does stuff with BG_GM
+	virtual void kill(); // nullsub here, defined in StageActor. probably no params
+	virtual int _vf68(); // params unknown. return (1) might be bool
+	virtual u8 *_vf6C(); // returns byte 0x38D
+	virtual Vec2 _vf70(); // returns Vec Actor.pos + Vec Actor.field_D0
+	virtual int _vf74(); // params unknown. return (1) might be bool
+	virtual void itemPickedUp(); // params unknown. nullsub
+	virtual void _vf7C(); // params unknown. nullsub
+	virtual void eatIn(); // copies Actor.scale into StageActor.somethingRelatedToScale
+	virtual void disableEatIn(); // params unknown. nullsub
+	virtual void _vf88(); // params unknown. nullsub
+	virtual bool _vf8C(void *other); // dAcPy_c/daPlBase_c? return (1) is probably bool. seems related to EatOut. uses vfA4
+	virtual bool _vf90(dStageActor_c *other); // does something with scores
+	virtual void _vf94(void *other); // dAcPy_c/daPlBase_c? modifies This's position
+	virtual void removeMyActivePhysics();
+	virtual void addMyActivePhysics();
+	virtual void returnRegularScale(); // the reverse of vf80, yay
+	virtual void _vfA4(void *other); // AcPy/PlBase? similar to vf94 but not quite the same
+	virtual float _vfA8(void *other); // AcPy/PlBase? what DOES this do...? does a bit of float math
+	virtual void _vfAC(void *other); // copies somethingRelatedToScale into scale, then multiplies scale by vfA8's return
+	virtual void killedByLevelClear(); // plays Wm_en_burst_s at actor position
+	virtual void _vfB4(); // params unknown. nullsub
+	virtual void _vfB8(); // params unknown. nullsub
+	virtual void _vfBC(); // params unknown. nullsub
+	virtual void _vfC0(); // params unknown. nullsub
+	virtual void _vfC4(); // params unknown. nullsub
+	virtual void _vfC8(Vec2 *p, float f); // does stuff including effects and playing PLAYER_SE_OBJ/GROUP_BOOT/SE_OBJ_CMN_SPLASH
+	virtual void _vfCC(Vec2 *p, float f); // mostly same as vfC8, but uses PLAYER_SE_OBJ/GROUP_BOOT/SE_OBJ_CMN_SPLASH_LAVA
+	virtual void _vfD0(Vec2 *p, float f); // mostly same as vfC8, but uses PLAYER_SE_OBJ/GROUP_BOOT/SE_OBJ_CMN_SPLASH_POISON
+
+	// I'll add methods as I need them
+	bool outOfZone(Vec3 pos, float* rect, u8 zone);
+	bool checkZoneBoundaries(u32 flags); // I think this method is for that, anyway
+	void Delete(u8 param1);				// fBase_c::Delete(void);
+
+	~dStageActor_c();
+
+
+	static dStageActor_c *create(u16 profileId, u32 settings, Vec *pos, S16Vec *rot, u8 layer);
+	static dStageActor_c *createChild(u16 profileId, dStageActor_c *parent, u32 settings, Vec *pos, S16Vec *rot, u8 layer);
+
+	// these are valid while in onCreate
+	static u8 *creatingByteStorage; // 0x80429FF4
+	static u16 creatingFlagID; // 0x80429FF8
+	static u64 creatingFlagMask; // 0x8042A000
+	static u8 creatingLayerID; // 0x8042A000
+};
+
+class dPlayerModelBase_c {
+	// dunno what's public and what's private here
+	// don't really care
+public:
+	dPlayerModelBase_c(u8 player_id);		// 800D5420
+	virtual ~dPlayerModelBase_c();			// 800D55D0
+
+	mHeapAllocator_c allocator;
+	u32 _20;
+	u32 _24;
+	char someAnimation[2][0x38]; // actually PlayerAnim's
+	char yetAnotherAnimation[40]; // actually m3d::banm_c afaics -- is it even 40 bytes?
+	Vec HeadPos; // maybe not an array
+	Vec HatPos; // maybe not an array
+	Mtx finalMatrix;
+	Mtx firstMatrix;
+	Vec headOffs;
+	Vec pos;
+	u8 player_id_1;
+	u8 player_id_2;
+	u8 powerup_id;
+	u8 powerup_tex;
+	int current_anim;
+	int last_anim_maybe;
+	u32 _15C;
+	int someFlags;
+	u32 _164;
+	u32 _168; // related to jump_strings
+	u32 _16C;
+	u32 _170;
+	u32 _174;
+	u8 _178;
+	char padding[3]; // not needed?
+	u32 model_visibility_flags_maybe; // 0x100=star glow, 0x200=star effects
+	u32 mode_maybe;
+	float _184;
+	float _188;
+	u32 _18C;
+	char someArray[6][12]; // some unknown class/struct
+	char _1D8[0x24];
+	short _1FC;
+	short _1FE;
+	short _200;
+	char padding_[2]; // not needed?
+	u32 _204;
+	u32 _208;
+
+	class ModelThing {
+		public:
+			m3d::mdl_c body, head;
+	};
+
+	virtual int _vf0C();						// 800D6DA0
+	virtual void prepare();					// 800D5720
+	virtual void finaliseModel();				// 800D5740
+	virtual void update();						// 800D5750
+	virtual void update3DStuff();				// 800D5760
+	virtual void _vf20();						// 800D6D90
+	virtual void draw();						// 800D5C70
+	virtual ModelThing *getCurrentModel();				// 800D5870
+	virtual int getCurrentResFile();			// 800D62D0
+	virtual void setPowerup(u8 powerup_id);	// 800D5730
+	virtual void setPowerupTexture();			// 800D5CC0
+	virtual void _vf38();						// 800D6D80
+	virtual void _vf3C();						// 800BD750
+	virtual void enableStarColours();			// 800D6D70
+	virtual void disableStarColours();			// 800D6D60
+	virtual void enableStarEffects();			// 800BD740
+	virtual void disableStarEffects();			// 800BD730
+	virtual void getModelMatrix(Mtx *dest, u32 unk);	// 800D5820
+	virtual int _vf54();						// 80318D0C
+	virtual bool _vf58(int type, char *buf, bool unk); // 800D6930
+	virtual void startAnimation(int id, float updateRate, float unk, float frame);	// 800D5EC0
+	virtual int _vf60();						// 800D6920
+	virtual void _vf64(int id, float unk1, float unk2, float unk3); // 800D62F0
+	virtual void _vf68(int id, float unk);		// 800D63E0
+	virtual void _vf6C();						// 800D62E0
+	virtual void _vf70();						// 800D6690
+	virtual void _vf74();						// 800D66A0
+	virtual void _vf78();						// 800D66B0
+	virtual void SomethingRelatedToPenguinAnims();	// 800D66C0
+	virtual void _vf80();						// 800D6A20
+	virtual void _vf84(float frame);			// 800D5D00
+	virtual void _vf88(float frame);			// 800D5D70
+	virtual void _vf8C(float updateRate);		// 800D5D80
+	virtual void setUpdateRateForAnim1(float updateRate);	// 800D5DF0
+	virtual void _vf94();						// 800D6D40
+	virtual int _vf98();						// 800D6D30
+	virtual void _vf9C();						// 800D6D20
+	virtual int _vfA0();						// 800D6D10
+	virtual void _vfA4();						// 800D6D00
+	virtual int _vfA8();						// 800D6CF0
+	virtual void _vfAC(bool blah);						// 800BD720
+
+	// I won't even bother with non-virtual functions....
+};
+
+
+class dPlayerModel_c : public dPlayerModelBase_c {
+	public:
+		// methods? what do you need those for...
+		// (not bothering with them either)
+		nw4r::g3d::ResFile modelResFile, animResFile1, animResFile2;
+
+		u8 effectClass0[296];
+		u8 effectClass1[296];
+
+		ModelThing models[4];
+
+		// maybe these are mAllocator_c?
+		m3d::anmTexPat_c bodySwitchAnim;
+		m3d::anmClr_c bodyStarAnmClr;
+		m3d::anmTexPat_c headSwitchAnim;
+		m3d::anmTexPat_c propHeadSwitchAnim;
+		m3d::anmTexPat_c pengHeadSwitchAnim;
+		m3d::anmClr_c headStarAnmClr;
+
+		u32 currentPlayerModelID;
+		u32 lastPlayerModelID;
+		// tons of crap more, don't feel like fixing this up atm
+};
+
+
+class dPlayerModelHandler_c {
+public:
+	dPlayerModelHandler_c(); //...?
+	dPlayerModelHandler_c(u8 player_id);	// 800D6DB0
+	virtual ~dPlayerModelHandler_c();		// 800D6EF0
+
+	dPlayerModelBase_c *mdlClass;	// might be dPlayerModel_c ?
+
+	int loadModel(u8 player_id, int powerup_id, int unk);	// 800D6EE0
+	void update();											// 800D6F80
+	void setMatrix(Mtx *matrix);								// 800D6FA0
+	void setSRT(Vec position, S16Vec rotation, Vec scale);	// 800D7030
+	void callVF20();										// 800D70F0
+	void draw();											// 800D7110
+
+private:
+	int hasMatrix;	// might be bool ?
+
+	void allocPlayerClass(u8 player_id);					// 800D6E00
+};
+
+
+// formerly dPlayerInput_c
+class dAcPyKey_c {
+public:
+	int playerID;
+	u16 heldButtons, nowPressed;
+	u16 lastHeldButtons, lastNowPressed;
+	u16 applyToHeldButtonsWithFlag7_permanent, applyToHeldButtonsWithFlag7_transient;
+	u16 forcedShakeValue;
+	u16 flags;
+
+	u8 downHeldCounter;
+	bool dontResetGPValuesNextTick, currentlyHoldingDown;
+	bool shakeJump, shaking_18;
+	bool wasActionExecuted;
+	u16 _1A;
+	int countdownAfterFlag6Deactivated;
+	u32 _20;
+	int rollingHistoryOfTwo[4][10];
+	int rollingHistoryOfTwoModifiedByFlags[4][10];
+	
+
+	dAcPyKey_c();
+	~dAcPyKey_c();
+
+	void activate(int playerID) { this->playerID = playerID; }
+	void deactivate(); // 8005E030
+
+	void execute(); // 8005E040
+	void loadDataDirectlyFromRemocon(); // 8005E2B0
+
+	bool detectGroundPound(); // 8005E300
+
+	enum Flags {
+		NO_INPUT = 0,
+		FORCE_TWO_ON = 3,
+		FORCE_TWO_OFF = 4,
+		ONLY_HOLD_RIGHT = 6,
+		FORCE_VALUES = 7,
+		NO_SHAKING = 8,
+	};
+	enum FlagMask {
+		NO_INPUT_MASK = 1 << NO_INPUT,
+		FORCE_TWO_ON_MASK = 1 << FORCE_TWO_ON,
+		FORCE_TWO_OFF_MASK = 1 << FORCE_TWO_OFF,
+		ONLY_HOLD_RIGHT_MASK = 1 << ONLY_HOLD_RIGHT,
+		FORCE_VALUES_MASK = 1 << FORCE_VALUES,
+		NO_SHAKING_MASK = 1 << NO_SHAKING,
+	};
+
+	void setFlag(Flags flag); // 8005E3B0
+	void unsetFlag(Flags flag); // 8005E460
+
+	void clearInputs(); // 8005E480
+	void unsetLeftAndRight(); // 8005E4A0
+
+	u32 getPressedA(); // 8005E4C0
+	u32 getAllHeldArrows(); // 8005E4D0
+	u32 getAllPressedArrows(); // 8005E4E0
+
+	u32 getHeldUp(); // 8005E4F0
+	u32 getHeldDown(); // 8005E500
+	u32 getHeldLeft(); // 8005E510
+	u32 getHeldRight(); // 8005E520
+	u32 getPressedUp(); // 8005E530
+	u32 getPressedDown(); // 8005E540
+	u32 getPressedLeft(); // 8005E550
+	u32 getPressedRight(); // 8005E560
+
+	u32 getPressedTwo(); // 8005E570
+	u32 getHeldTwo(); // 8005E580
+
+	u32 getPressedBorOne(); // 8005E590
+	u32 getHeldBorOne(); // 8005E5D0
+
+	u32 getHeldOne(); // 8005E610
+
+	u32 willPunchFence_maybe(); // 8005E620
+	u32 willEatOrSpit_maybe(); // 8005E630
+	u32 willPerformSomeAction_B_or_One(); // 8005E680
+	bool willShootProjectile(); // 8005E690
+
+	u32 j_getPressedTwo(); // 8005E6E0
+
+	u32 willJump_maybe(); // 8005E6F0
+
+	u32 getHeldTwoModifiedByFlags(); // 8005E740
+
+	u32 yetAnotherTwoThunk(); // 8005E770
+
+	u32 areWeShaking(); // 8005E780
+	void clearShakeInputs(); // 8005E790
+
+	bool getLRMovementDirection(int *pOutDirection = 0); // 8005E7A0
+
+	u32 anotherDownAction(); // 8005E830
+
+	u32 isDownPressedExclusively(); // 8005E840
+	u32 isUpPressedWithoutLeftOrRight(); // 8005E890
+
+	bool wasTwoPressedRecently(); // 8005E8B0
+
+	void setPermanentForcedButtons(u32 buttons); // 8005E910
+	void unsetPermanentForcedButtons(u32 buttons); // 8005E930
+	void setTransientForcedButtons(u32 buttons); // 8005E960
+	void forceShakingOn(); // 8005E980
+};
+
+class daPlBase_c : public dStageActor_c {
+public:
+	// Can't be assed to build full headers right now
+	u8 data[0xC8];
+	float demoMoveSpeed;
+	u8 data2[0xA44];
+
+	dAcPyKey_c input;
+	int standingOnID, m_doorActor;
+	u8 data3[0x25];
+	u8 chainlinkMode;
+	u8 data4[0x5A];
+
+	int powerup;
+	u8 data5[0x384];
+
+	dStateWrapper_c<daPlBase_c> demoStates;
+	u32 demoStateParam;
+	u32 _1458, _145C;
+	u8 _1460, _1461, _1462, _1463;
+	dStateWrapper_c<daPlBase_c> states2;
+
+	u8 data6[0x34];
+
+	daPlBase_c();
+
+	void changeState(dStateBase_c *state, u32 param_maybe);
+
+	bool isItemKinopio();
+	void setPowerup(int powerupID);
+	float *getGravityData(); // actually returns a struct but fuck that
+	int getMukiAngle(int unk); 
+
+	void justFaceSpecificDirection(int direction);
+	void moveInDirection(float *targetX, float *speed);
+	bool isReadyForDemoControlAction();
+
+	void setAnimePlayWithAnimID(int id);
+	void setAnimePlayStandardType(int id);
+
+	void setFlag(int flag);
+	void clearFlag(int flag);
+	bool isStatus(int flag); // formerly testFlag()
+
+	bool isCarry();
+
+	void playPlayerSound(int sound, long shouldPlay);
+
+	static daPlBase_c *findByID(int id);
+};
+
+float PlBaseDirectionSpeedModifier[2]; // 1.0f, -1.0f
+
+#include "poweruphax.hpp"
+
+class dAcPy_c : public daPlBase_c {
+public: // all of these unknowns have incorrect offsets...
+	u32 characterID, _1474;
+	int previousPowerup_maybe, powerupAlt;
+	float _1480, _1484;
+
+	u8 poleStruct[0x10];
+	u8 pole[0x30]; // actually dPc_c
+	Vec initialPos;
+
+	u32 _14D4;
+	u8 scrollMode;
+	s8 _14D9;
+	u8 _14DA, _14DB;
+	u32 _14DC;
+	float _1544;
+
+	int doorCenterWidthSelector;
+	u32 _14E8, _14EC, _14F0;
+	u8 _14F4, _14F5, _14F6, _14F7;
+	int _14F8, _14FC, jumpSoundRelated;
+
+	u8 blob[0x1264]; // fuck this class
+	u8 _27CC;
+	u8 blob2[0x14B];
+	u32 _2918, _291C;
+	u8 _2920, _2921, pad[2];
+	u32 _2924, _2928;
+	u8 blob3[0x134];
+	dPlayerModelHandler_c modelCls;
+	float _2A6C, _2A70, _2A74;
+	u32 idWeAreCarrying;
+	u8 blob4[0x28C];
+
+	// new
+	dShellRenderer_c *shellRenderer;
+	
+	// Can't be assed to build full headers right now
+	dAcPy_c();
+	void newDtor();
+
+	int onDraw();
+
+	int newOnCreate();
+	void *getYoshi(); // 80139A90
+
+	void createProjectile(int unk); // replaces 0x8013BCD0
+	void setSpinPowerup(); // replaces 0x8013C2F0
+	bool projectileShootCheck(); // replaces 0x8013BB00
+	bool setProjectileAction(); // replaces 0x8013BBC0
+
+	void setScrollMode(s8 mode);
+
+	static dAcPy_c *findByID(int id);
+	static dAcPy_c *getCarryPlayer();
+
+	static dAcPy_c *newClassInit();
+
+	USING_STATES(dAcPy_c);
+	REF_NINTENDO_STATE(Fire);
+};
+
+daPlBase_c *GetPlayerOrYoshi(int id);
+
+
+class dAc_Py_c : public dStageActor_c {
+public:
+	u8 data[0x1164 - 0x394];
+	ActivePhysics bPhysics;
+	ActivePhysics cPhysics;
+	ActivePhysics dPhysics;
+	ActivePhysics ePhysics;
+
+	dAc_Py_c();
+
+	int beforeCreate();
+	int afterCreate(int);
+	int beforeDelete();
+	int afterDelete(int);
+	int beforeExecute();
+	int afterExecute(int);
+	int beforeDraw();
+	int afterDraw(int);
+
+	~dAc_Py_c();
+};
+
+
+class dActorState_c : public dStageActor_c {
+public:
+	dActorState_c();
+	~dActorState_c();
+
+	dStateWrapper_c<dActorState_c> acState;
+
+	virtual void beginState_Gegneric();
+	virtual void executeState_Gegneric();
+	virtual void endState_Gegneric();
+};
+
+
+class dActorMultiState_c : public dStageActor_c {
+public:
+	~dActorMultiState_c();
+
+	MultiStateMgr acState;
+
+	virtual void doStateChange(dStateBase_c *state); // might return bool? overridden by dEn_c
+	virtual void _vfD8(); // nullsub ??
+	virtual void _vfDC(); // nullsub ??
+	virtual void _vfE0(); // nullsub ??
+};
+
+
+struct EntityDeathInfo {
+	float xSpeed, ySpeed, maxYSpeed, yAccel;
+	dStateBase_c *state;
+	u32 _14, _18;
+	u8 _1C, _1D, isDead;
+};
+
+class dEn_c : public dActorMultiState_c {
+public:
+	EntityDeathInfo deathInfo;
+	u32 _434;
+	u16 _438;
+	u32 _43C;
+	Vec velocity1, velocity2;
+	u8 _458, _459, _45A, _45B, _45C, _45D, _45E;
+	u32 _460;
+	Vec initialScale;
+	float _470;
+	u32 _474, _478;
+	dEn_c *_47C;
+	u32 _480;
+	//FIXME verify that size fits
+	//u8 classAt484[0x4EC - 0x484];
+	freezeMgr_c frzMgr;
+	u32 _4EC;
+	float _4F0, _4F4, _4F8;
+	u32 flags_4FC;
+	u16 counter_500, counter_502;
+	u16 counter_504[4];
+	u16 counter_50C;
+	u32 _510, _514, _518;
+	void *_51C;
+	dEn_c *_520;
+
+	dEn_c();
+
+	int afterCreate(int);
+	int beforeExecute();
+	int afterExecute(int);
+	int beforeDraw();
+
+	void kill();
+
+	void eatIn();
+	void disableEatIn();
+	bool _vf8C(void *other); // AcPy/PlBase?
+	void _vfAC();
+	void _vfCC(Vec2 *p, float f);
+	void _vfD0(Vec2 *p, float f);
+
+	void doStateChange(dStateBase_c *state); // might return bool, dunno
+
+	// Now here's where the fun starts.
+
+	virtual bool preSpriteCollision(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool prePlayerCollision(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool preYoshiCollision(ActivePhysics *apThis, ActivePhysics *apOther);
+
+	virtual bool stageActorCollision(ActivePhysics *apThis, ActivePhysics *apOther);
+
+	virtual void spriteCollision(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual void playerCollision(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual void yoshiCollision(ActivePhysics *apThis, ActivePhysics *apOther);
+
+	// WHAT A MESS
+	virtual bool collisionCat3_StarPower(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat5_Mario(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool _vf108(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCatD_Drill(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool _vf110(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat8_FencePunch(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat7_GroundPound(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat7_GroundPoundYoshi(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool _vf120(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCatA_PenguinMario(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat11_PipeCannon(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat9_RollingObject(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat1_Fireball_E_Explosion(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat2_IceBall_15_YoshiIce(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat13_Hammer(ActivePhysics *apThis, ActivePhysics *apOther);
+	virtual bool collisionCat14_YoshiFire(ActivePhysics *apThis, ActivePhysics *apOther);
+
+	virtual void _vf140(dStageActor_c *actor);
+	virtual void powBlockActivated(bool isNotMPGP);
+	virtual void _vf148(); // deletes actors held by Class484 and other stuff
+	virtual void _vf14C(); // deletes actors held by Class484 and makes an En Coin Jump
+	virtual u32 canBePowed(); // reads some bits from a value in Class1EC
+	virtual void eatenByYoshiProbably(); // nullsub, params unknown
+	virtual void playHpdpSound1(); // plays PLAYER_SE_EMY/GROUP_BOOT/SE_EMY_DOWN_HPDP_S or _H
+	virtual void playEnemyDownSound1();
+	virtual void playEnemyDownComboSound(void *player); // AcPy_c/daPlBase_c?
+	virtual void playHpdpSound2(); // plays PLAYER_SE_EMY/GROUP_BOOT/SE_EMY_DOWN_HPDP_S or _H
+	virtual void _vf168(); // nullsub, params unknown
+
+	// State Functions
+	virtual void dieFumi_Begin(); // does something involving looping thruogh players
+	virtual void dieFumi_Execute(); // does movement and some other stuff
+	virtual void dieFumi_End(); // nullsub
+	virtual void dieFall_Begin(); // does something involving looping thruogh players
+	virtual void dieFall_Execute(); // does movement and some other stuff
+	virtual void dieFall_End(); // nullsub
+	virtual void dieBigFall_Begin(); // calls vf178 [dieFall_Begin]
+	virtual void dieBigFall_Execute(); // does movement and some other stuff (but less than 170 and 17C)
+	virtual void dieBigFall_End(); // calls vf180 [dieFall_End]
+	virtual void dieSmoke_Begin(); // spawns Wm_en_burst_m effect and then removeMyActivePhysics
+	virtual void dieSmoke_Execute(); // deletes actor with r4=1
+	virtual void dieSmoke_End(); // nullsub
+	virtual void dieYoshiFumi_Begin(); // spawns Wm_mr_yoshistep effect and then removeMyActivePhysics
+	virtual void dieYoshiFumi_Execute(); // deletes actor with r4=1
+	virtual void dieYoshiFumi_End(); // nullsub
+	virtual void dieIceVanish_Begin(); // lots of weird stuff
+	virtual void dieIceVanish_Execute(); // deletes actor with r4=1
+	virtual void dieIceVanish_End(); // nullsub
+	virtual void dieGoal_Begin(); // nullsub
+	virtual void dieGoal_Execute(); // nullsub
+	virtual void dieGoal_End(); // nullsub
+	virtual void dieOther_Begin(); // deletes actor with r4=1
+	virtual void dieOther_Execute(); // nullsub
+	virtual void dieOther_End(); // nullsub
+	virtual void eatIn_Begin(); // nullsub
+	virtual void eatIn_Execute(); // changes to EatNow on one condition, otherwise calls vfAC
+	virtual void eatIn_End(); // nullsub
+	virtual void eatNow_Begin(); // nullsub
+	virtual void eatNow_Execute(); // nullsub
+	virtual void eatNow_End(); // nullsub
+	virtual void eatOut_Begin(); // nullsub
+	virtual void eatOut_Execute(); // nullsub
+	virtual void eatOut_End(); // nullsub
+	virtual void hitSpin_Begin(); // nullsub
+	virtual void hitSpin_Execute(); // nullsub
+	virtual void hitSpin_End(); // nullsub
+	virtual void ice_Begin(); // does stuff with Class484 and lots of vf's
+	virtual void ice_Execute(); // tons of stuff with Class484
+	virtual void ice_End(); // sets a field in Class484 to 0
+
+	virtual void spawnHitEffectAtPosition(Vec2 pos);
+	virtual void doSomethingWithHardHitAndSoftHitEffects(Vec pos);
+	virtual void playEnemyDownSound2();
+	virtual void add2ToYSpeed();
+	virtual bool _vf218(); // stuff with floats and camera
+	virtual void _vf21C(); // does stuff with the speeds
+	virtual void _vf220(void *player); // hurts player
+	virtual void _vf224(); // stores a couple of values into the struct at 464
+	virtual void _vf228(); // more fun stuff with 464 and floats
+	virtual bool CreateIceActors(); // does stuff involving ICE_ACTORs and arrays
+	virtual void _vf230(); // "relatedToPlayerOrYoshiCollision" apparently. nullsub, params unknown for now.
+	virtual void _vf234(); // nullsub, params unknown
+	virtual void _vf238(); // calls vf34 on class394, params unknown
+	virtual void _vf23C(); // nullsub, params unknown
+	virtual void _vf240(); // nullsub, params unknown
+	virtual int _vf244(); // returns 0. might be bool. params unknown
+	virtual int _vf248(int something); // does some math involving field510 and [7,7,4,0] and param
+	virtual void bouncePlayerWhenJumpedOn(void *player);
+	virtual void addScoreWhenHit(void *other); // Other is dPlayer
+	virtual void _vf254(void *other);
+	virtual void _vf258(void *other);
+	virtual void _vf25C(void *other); // calls vf250
+	virtual void _vf260(void *other); // AcPy/PlBase? plays the SE_EMY_FUMU_%d sounds based on some value
+	virtual void _vf264(dStageActor_c *other); // if other is player or yoshi, do Wm_en_hit and a few other things
+	virtual void _vf268(void *other); // AcPy/PlBase? plays the SE_EMY_DOWN_SPIN_%d sounds based on some value
+	virtual void spawnHitEffectAtPositionAgain(Vec2 pos);
+	virtual void playMameStepSound(); // SE_EMY_MAME_STEP at actor position
+	virtual void _vf274(); // nullsub, params unknown
+	virtual void _vf278(void *other); // AcPy/PlBase? plays the SE_EMY_YOSHI_FUMU_%d sounds based on some value
+	virtual void _vf27C(); // nullsub, params unknown
+
+	~dEn_c();
+
+	static void collisionCallback(ActivePhysics *one, ActivePhysics *two);
+
+	void doSpriteMovement();
+	bool CheckIfPlayerBelow(float,float);
+
+	void stuffRelatingToCollisions(float, float, float);
+
+	void checkLiquidImmersionAndKillIfTouchingLava(Vec *pos, float effectScale);
+	void checkLiquidImmersion(Vec2 *effectivePosition, float effectScale);
+
+	void killWithSpecifiedState(dStageActor_c *killedBy, VEC2 *effectiveSpeed, dStateBase_c *state, u32 _unused=0);
+	void bouncePlayer(void* player, float bounceHeight);
+
+	void killByDieFall(dStageActor_c *killedBy);
+
+	// States
+	USING_STATES(dEn_c);
+	REF_NINTENDO_STATE(DieFumi);
+	REF_NINTENDO_STATE(DieFall);
+	REF_NINTENDO_STATE(DieBigFall);
+	REF_NINTENDO_STATE(DieSmoke);
+	REF_NINTENDO_STATE(DieIceVanish);
+	REF_NINTENDO_STATE(DieYoshiFumi);
+	REF_NINTENDO_STATE(DieGoal);
+	REF_NINTENDO_STATE(DieOther);
+};
+
+
+class daEnBlockMain_c : public dEn_c {
+public:
+	u32 _534, _528, _52C, _530;
+	Physics physics;
+	float _618, _61C, _620;
+	u32 _624, _628, _62C;
+	float initialY;
+	float _634, _638, _63C, _640;
+	u32 countdown, _648, _64C;
+	u32 _650, _654, _658, _65C;
+	u16 _660;
+	u8 _662, _663, _664, _665, _666, _667;
+	u8 _668, _669, _66A, _66B, _66C, _66D, _66E, _66F;
+	u8 _670, _671, _672, _673;
+	u8 _674;
+	u8 _675, _676, _677, _678, _679, _67A, _67B, _67C;
+	u8 _67D, _67E, _67F, _680;
+	u32 _684;
+	u8 _688, isGroundPound, anotherFlag, _68B, _68C, _68D, _68E, _68F;
+	u32 in_coin_depends_on_nyb10;
+	u8 playerID;
+
+	// Regular methods
+	void blockInit(float initialY);
+	void blockUpdate();
+	u8 blockResult();
+
+	virtual void calledWhenUpMoveBegins();
+	virtual void calledWhenDownMoveBegins();
+
+	virtual void calledWhenUpMoveExecutes();
+	virtual void calledWhenUpMoveDiffExecutes();
+	virtual void calledWhenDownMoveExecutes();
+	virtual void calledWhenDownMoveEndExecutes();
+	virtual void calledWhenDownMoveDiffExecutes();
+	virtual void calledWhenDownMoveDiffEndExecutes();
+
+	virtual void updateScale(bool movingDown);
+
+	// State functions
+	virtual void upMove_Begin();
+	virtual void upMove_Execute();
+	virtual void upMove_End();
+	virtual void downMove_Begin();
+	virtual void downMove_Execute();
+	virtual void downMove_End();
+	virtual void downMoveEnd_Begin();
+	virtual void downMoveEnd_Execute();
+	virtual void downMoveEnd_End();
+	virtual void upMove_Diff_Begin();
+	virtual void upMove_Diff_Execute();
+	virtual void upMove_Diff_End();
+	virtual void downMove_Diff_Begin();
+	virtual void downMove_Diff_Execute();
+	virtual void downMove_Diff_End();
+	virtual void downMove_DiffEnd_Begin();
+	virtual void downMove_DiffEnd_Execute();
+	virtual void downMove_DiffEnd_End();
+
+	static void *PhysicsCallback1;
+	static void *PhysicsCallback2;
+	static void *PhysicsCallback3;
+	static void *OPhysicsCallback1;
+	static void *OPhysicsCallback2;
+	static void *OPhysicsCallback3;
+
+	USING_STATES(daEnBlockMain_c);
+	REF_NINTENDO_STATE(UpMove);
+	REF_NINTENDO_STATE(DownMove);
+	REF_NINTENDO_STATE(DownMoveEnd);
+	REF_NINTENDO_STATE(UpMove_Diff);
+	REF_NINTENDO_STATE(DownMove_Diff);
+	REF_NINTENDO_STATE(DownMove_DiffEnd);
+
+	~daEnBlockMain_c();
+};
+
+
+
+class daKameckDemo : public dEn_c {
+
+public:
+	USING_STATES(daKameckDemo);
+	REF_NINTENDO_STATE(DemoWait);
+	REF_NINTENDO_STATE(DemoSt);
+	REF_NINTENDO_STATE(DemoSt2);
+};
+
+
+class daBossKoopa_c : public dEn_c {
+
+public:
+	USING_STATES(daBossKoopa_c);
+	REF_NINTENDO_STATE(Fall);
+};
+
+class daNeedles : public dEn_c {
+
+public:
+	USING_STATES(daNeedles);
+	REF_NINTENDO_STATE(DemoWait);
+	REF_NINTENDO_STATE(DemoAwake);
+	REF_NINTENDO_STATE(Idle);
+	REF_NINTENDO_STATE(Die);
+};
+
+
+class dPlayer : public dActorMultiState_c {
+
+public:
+	USING_STATES(dPlayer);
+	REF_NINTENDO_STATE(None);
+	REF_NINTENDO_STATE(Walk);
+	REF_NINTENDO_STATE(Jump);
+	REF_NINTENDO_STATE(DemoNone);
+	REF_NINTENDO_STATE(DemoWait);
+	REF_NINTENDO_STATE(DemoGoal);
+	REF_NINTENDO_STATE(DemoControl);
+};
+
+
+
+
+struct dWaterInfo_s {
+	float x, y, z, width, height;
+	int isInUse;
+	u8 type, layer;
+};
+
+struct WaterData {
+    float x;
+    float y;
+    float z;
+    float width;
+    float height;
+    u32 isInUse;
+    u8 type; /*        0 = water
+                    1 = lava
+                    2 = poison
+                    3 = round bubble
+                    4 = tall bubble
+                    5 = wide bubble */
+    u8 layer;
+    u16 pad;
+};
+
+class dWaterManager_c {
+    public:
+        WaterData data[80];
+        float current;
+
+        static dWaterManager_c *instance;
+
+        dWaterManager_c() { instance = this; }
+        ~dWaterManager_c() { instance = 0; }
+
+        void setup();
+        int addBlock(WaterData *block);
+
+    public: // i think this should be public, why was it private anyway
+        int isPointWithinSpecifiedBlock(VEC2 *pos, int blockID);
+        int getAngleOfVector(VEC2 *vec);
+        int isPointWithinBubbleInternal(VEC2 *pos, int blockID, VEC2 *pOutVec, float *pFloat, s16 *pShort);
+
+    public:
+        int queryPosition(VEC2 *pos, VEC2 *pOutBlockPos, float *pOutFloat, s16 *pOutAngle, int layer);
+        int isPositionWithinBubble(VEC2 *pos, VEC2 *pOutBlockPos, int blockID, int layer);
+        void removeBlock(int blockID);
+        void setPosition(VEC3 *pos, int blockID);
+        void setGeometry(VEC3 *pos, float width, float height, int blockID);
+};
+
+class BgGmBase : public dBase_c {
+public:
+	struct something_s {
+		u16 x, y;
+		int layer, countdown, tile;
+	};
+	struct limitLineEntry_s {
+		float leftX, rightX;
+		float _8, _C, _10, y, _18, _1C, _20, _24, _28, _2C;
+		float zoneY, zoneHeight, zoneX, zoneWidth;
+		u16 flags; // documented in idb struct, kind of
+	};
+	struct manualZoomEntry_s {
+		float x1, x2, y1, y2;
+		u8 unkValue6, zoomLevel, firstFlag;
+	};
+	struct beets_s {
+		float _0, _4;
+		u8 _8;
+	};
+
+	u32 behaviours; //type?
+
+	int somethingCount;
+	something_s somethings[256];
+
+	// Limit lines grouped by:
+	// 64 zones; 8 groups IDed by mysterious setting; 16 lines per group
+	limitLineEntry_s limitLines[64][8][16];
+
+	manualZoomEntry_s manualZooms[64];
+
+	u32 _8F478, _8F47C;
+
+	beets_s beets1[100];
+	beets_s beets2[100];
+	// TODO, a lot
+
+	u16 *getPointerToTile(int x, int y, int layer, int *pBlockNum = 0, bool unused = false);
+
+	// Note: these tile numbers are kinda weird and involve GetTileFromTileTable
+	void placeTile(u16 x, u16 y, int layer, int tile);
+
+	void makeSplash(float x, float y, int type); // 80078410
+};
+
+
+class dBgGm_c : public BgGmBase {
+public:
+	// TODO TODO TODO TODO TODO
+	static dBgGm_c *instance;
+
+	TileRenderer::List *getTileRendererList(int index);
+};
+
+
+class mTexture_c {
+public:
+	mTexture_c();	// 802C0D20
+	mTexture_c(u16 width, u16 height, u32 format);	// 802C0D70
+
+	// vtable is at 80350450
+	virtual ~mTexture_c();	// 802C0DB0
+	virtual void setFlagTo1();	// 802C0E20
+
+	void setImageBuffer(void *buffer);	// 802C0E30
+	void load(u32 id);			// 802C0E50
+	void makeTexObj(GXTexObj *obj);		// 802C0E90
+	void flushDC();						// 802C0F10
+
+	void makeRadialGradient();			// 802C0F60 parameters unknown yet
+	void makeLinearGradient(int type, char size, u16 startPos, u16 endPos,
+			GXColor begin, GXColor end, bool startAtCenter);	// 802C1120
+	// "type" should be enum once I figure it out
+	// reverse might not be accurate
+
+	void allocateBuffer(/* EGG::Heap */void *heap = 0);	// 802C14D0
+
+	void plotPixel(u16 x, u16 y, GXColor pixel);	// 802C1570
+
+	void *getBuffer() const { return buffer; }
+
+	u16 width;
+	u16 height;
+	u8 flags;
+	u8 format;
+	u8 wrapS;
+	u8 wrapT;
+	u8 minFilter;
+	u8 magFilter;
+
+private:
+	void *buffer;
+	void *myBuffer;
+};
+
+
+class dDvdLoader_c {
+public:
+	dDvdLoader_c();				// 8008F140
+	virtual ~dDvdLoader_c();	// 8008F170
+
+	void *load(const char *filename, u8 unk = 0, void *heap = 0);	// 8008F1B0
+
+	bool close();	// 8008F2B0 -- Frees command, DON'T USE THIS unless you free the buffer yourself
+	bool unload();	// 8008F310 -- Frees command and buffer, USE THIS
+
+	int size;
+	void *command;	// really mDvd_toMainRam_c
+	void *heap;		// really EGG::Heap
+	void *buffer;
+
+private:
+	virtual void freeBuffer();	// 8008F380
+	void freeCommand();			// 8008F3F0
+};
+
+
+
+namespace nw4r {
+	namespace ut {
+		// "try to do stuff with fonts Mandy", "it'll be fun!", you said... if only you knew
+		// WHAT THE FUCKKKKK
+
+		namespace Font {
+			namespace ResourceFormat {
+				enum FontEncoding {
+					FONT_ENCODING_UTF8 = 0,
+					FONT_ENCODING_UTF16,
+					FONT_ENCODING_SJIS,
+					FONT_ENCODING_CP1252,
+				};
+
+				enum FontMappingMethod {
+					FONT_MAPMETHOD_DIRECT = 0,
+					FONT_MAPMETHOD_TABLE,
+					FONT_MAPMETHOD_SCAN,
+				};
+
+				enum FontSheetFormat {
+					FONT_GX_TF_I4 = 0,
+					FONT_GX_TF_I8,
+					FONT_GX_TF_IA4,
+					FONT_GX_TF_IA8,
+					FONT_GX_TF_RGB565,
+					FONT_GX_TF_RGB5A3,
+					FONT_GX_TF_RGBA8,
+					FONT_GX_TF_CMPR = 0xE,
+					FONT_GX_TF_Z8 = 0x11,
+					FONT_GX_TF_Z16 = 0x13,
+					FONT_GX_TF_Z24X8 = 0x16,
+					FONT_GX_CTF_R4 = 0x20,
+					FONT_GX_CTF_RA4 = 0x22,
+					FONT_GX_CTF_RA8,
+					FONT_GX_CTF_YUVA8 = 0x26,
+					FONT_GX_CTF_A8,
+					FONT_GX_CTF_R8,
+					FONT_GX_CTF_G8,
+					FONT_GX_CTF_B8,
+					FONT_GX_CTF_RG8,
+					FONT_GX_CTF_GB8,
+					FONT_GX_CTF_Z4 = 0x30,
+					FONT_GX_CTF_Z8M = 0x39,
+					FONT_GX_CTF_Z8L,
+					FONT_GX_CTF_Z16L = 0x3C,
+					FONT_GX_TF_A8,
+					FONT_SHEETFORMAT_COMPRESSED = 0x8000,
+				};
+
+				enum FontType {
+					TYPE_NULL = 0,
+					TYPE_ROM,
+					TYPE_RESOURCE,
+					TYPE_PAIR,
+				};
+
+				class FontWidths {
+					public:
+						u16 indexBegin;
+						u16 indexEnd;
+						FontWidths *pNext;
+						//CharWidths[0] widthTable; // idk what this is
+				};
+
+				class FontTextureGlyph {
+					public:
+						u8 cellWidth;
+						u8 cellHeight;
+						u8 baselinePos;
+						u8 maxCharWidth;
+						u32 sheetSize;
+						u16 sheetNum;
+						FontSheetFormat sheetFormat;
+						u16 sheetRow;
+						u16 sheetLine;
+						u16 sheetWidth;
+						u16 sheetHeight;
+						u8 *sheetImage;
+				};
+
+				class FontCodeMap {
+					public:
+						u16 codeBegin;
+						u16 codeEnd;
+						FontMappingMethod mappingMethod;
+						u16 reserved;
+						FontCodeMap *pNext;
+						//CharWidths[0] mapInfo; // seriously though, WHAT is this???
+				};
+
+				class FontInformation {
+					public:
+						FontType fontType;
+						u8 lineFeed;
+						u16 alterCharIndex;
+						//CharWidths defaultWidth;
+						FontEncoding encoding;
+						FontTextureGlyph *pGlyph;
+						FontWidths *pWidth;
+						FontCodeMap *pMap;
+						u8 height;
+						u8 width;
+						u8 ascent;
+						u8 pad;
+				};
+
+				// oh so this is font char info
+				class CharWidths {
+					public:
+						u8 left;
+						u8 glyphWidth;
+						u8 charWidth;
+				};
+			}
+
+			// this is probably not how you do it but idk
+			class FontVtable {
+				public:
+					u32 unk[2];
+
+					virtual void dtor(int unk);
+
+					virtual int getWidth();
+					virtual int getHeight();
+					virtual int getAscent();
+					virtual int getDescent();
+					virtual int getBaselinePos();
+					virtual int getCellHeight();
+					virtual int getCellWidth();
+					virtual int getMaxCharWidth();
+
+					// not all of them but shhhh
+
+			};
+
+			class Font {
+				public:
+					FontVtable *vtable;
+					u8 unk[0xC]; // PTMF goes here (mReaderFunc)
+			};
+
+			class Glyph {
+				public:
+					void *texture; // idk
+					ResourceFormat::CharWidths widths;
+					u8 height;
+					ResourceFormat::FontSheetFormat texFormat; // actually GXTexFmt but they're almost identical
+					u16 texWidth, texHeight, cellX, cellY;
+			};
+		}
+
+		namespace detail {
+			class ResFontBase {
+				public:
+					Font::Font inherit;
+					void *mResource; // idk
+					Font::ResourceFormat::FontInformation *mFontInfo;
+					u16 mLastCharCode;
+					u16 mLastGlyphIndex;
+			};
+		}
+
+		class CharWriter {
+			public:
+				CharWriter();
+				~CharWriter();
+
+				void SetupGX();
+
+				void SetFontSize(float w, float h);
+				void SetFontSize(float v);
+				float GetFontWidth() const;
+				float GetFontHeight() const;
+				float GetFontAscent() const;
+				float GetFontDescent() const;
+
+				// returns width
+				float Print(ushort character);
+
+				void PrintGlyph(float, float, float, /* nw4r::ut::Glyph const & */ void*);
+
+				void UpdateVertexColor();
+
+			private:
+				void SetupGXWithColorMapping(Color c1, Color c2);
+
+			public:
+				Color minColMapping, maxColMapping;
+				Color vtxColours[4];
+				Color topColour, bottomColour;
+
+				u32 modeOfSomeKind;
+				float scaleX;
+				float scaleY;
+				float posX;
+				float posY;
+				float posZ;
+				u32 minFilt;
+				u32 magFilt;
+				u16 completelyUnknown;
+				u8 alpha;
+				u8 isFixedWidth;
+				float fixedWidthValue;
+				/* ResFont* */ void *font;
+		};
+
+		// actually TextWriterBase<w>, but ...
+		class TextWriter : public CharWriter {
+			public:
+				TextWriter();
+				~TextWriter();
+
+				float GetLineHeight() const;
+
+				// left out most of these to avoid all the format string vararg bullshit
+				float CalcStringWidth(wchar_t const *string, int length) const;
+
+				float Print(wchar_t const *string, int length);
+
+				float CalcLineWidth(wchar_t const *string, int length);
+
+				float GetLineSpace() const;
+
+				bool IsDrawFlagSet(ulong, ulong) const;
+
+				float widthLimit;
+				float charSpace;
+				float lineSpace;
+				u32 tabWidth;
+				u32 drawFlag;
+				void *tagProcessor;
+		};
+	}
+}
+
+
+struct BinaryFileHeader {
+	u32 signature;
+	u16 byteOrder;
+	u16 version;
+	u32 fileSize;
+	u16 headerSize;
+	u16 dataBlocks;
+};
+
+
+// ADDING NEW FONTS INTO THE GAME:
+// todo write instructions
+
+#define FONT_COUNT 4
+
+class dFontMng_c {
+	public:
+		nw4r::ut::detail::ResFontBase fonts[FONT_COUNT]; // each ResFontBase is +0x1C
+		dDvdLoader_c fontLoaders[FONT_COUNT]; // each one is +0x14
+		BinaryFileHeader *fontDatas[FONT_COUNT]; // each pointer is +0x4
+
+		dFontMng_c();
+
+		int create(EGG::Heap *heap); // create fonts
+		int getResFontIndex(const char *filename);
+
+		static dFontMng_c *instance;
+};
+
+// sets font resource
+extern bool ResFontSetResource(nw4r::ut::detail::ResFontBase *self, BinaryFileHeader *brfnt); // 0x8022C4E0
+
+// really jank, this is actually just dDvdLoader_c.load()
+extern BinaryFileHeader *requestBrfntFile(dDvdLoader_c dvd, const char *filename, u8 unk = 0, void *heap = 0);
+
+
+
+
+// More layout crap
+// This file REALLY needs to be reorganised.
+
+namespace nw4r {
+namespace lyt {
+
+	class ResourceAccessor {
+	public:
+		ResourceAccessor();
+		virtual ~ResourceAccessor();
+
+		virtual void *GetResource(u32 dirKey, const char *filename, u32 *sizePtr) = 0;
+		virtual void *GetFont(const char *name);
+	};
+
+	class ArcResourceAccessor : public ResourceAccessor {
+	public:
+		ArcResourceAccessor();
+		~ArcResourceAccessor();
+
+		bool Attach(void *data, const char *rootDirName);
+		void *GetResource(u32 dirKey, const char *filename, u32 *sizePtr);
+		void *GetFont(const char *name);
+
+		char arcHandle[0x1C]; // should be a struct, but I'm too lazy to reverse it >_>
+		u32 unk_20;
+		ut::LinkList list; // 0x24
+		char rootDirName[0x80]; // 0x30
+		// class ends at 0xB0
+	};
+
+	class AnimResource {
+		public:
+			void *fileHeader;
+			void *info;
+			void *tags;
+			void *share;
+	};
+
+}
+}
+
+namespace m2d {
+	class ResAcc_c {
+	public:
+		ResAcc_c();
+		virtual ~ResAcc_c();
+		virtual void initialSetup();
+
+		nw4r::lyt::ResourceAccessor *resAccPtr; // 0x04
+		void *arcData; // 0x08
+		nw4r::lyt::ArcResourceAccessor resAcc; // 0x0C
+		// class ends at 0xBC
+
+		bool attachArc(void *data, const char *rootDir); // 0x801637A0
+	};
+
+	class ResAccLoader_c : public ResAcc_c {
+	public:
+		ResAccLoader_c();
+		~ResAccLoader_c();
+
+		void *buffer;
+		dDvdLoader_c loader; // 0xC0
+		// ends at 0xD4
+
+		bool loadArc(const char *path);
+		bool loadArc(const char *path, u8 unk);
+		void free();
+	};
+
+	class AnmResHandler_c {
+		public:
+			AnmResHandler_c();
+			virtual ~AnmResHandler_c();
+
+			struct Thing {
+				nw4r::lyt::Group *group;
+				nw4r::lyt::AnimTransform *animTransform;
+			};
+
+			nw4r::lyt::AnimResource resource; // 0x04
+			Thing *groups; // 0x14
+			u32 groupCount; // 0x18
+
+			bool load(const char *name, ResAcc_c *resAcc, nw4r::lyt::Layout *layout, bool useDiffInit);
+			bool free();
+			Thing *getThingForGroupName(const char *name); // 80164130
+	};
+
+	class FrameCtrl_c {
+		public:
+			virtual ~FrameCtrl_c();
+
+			float frameCount; // 0x04
+			float currentFrame; // 0x08
+			float lastFrame; // 0x0C
+			float speed; // 0x10; default: 1
+			u8 flags; // 0x14
+
+			void processAnim(); // 0x80163800
+			void setup(u8 flags, float frameCount, float speed, float initialFrame); // 0x801638A0
+			void setCurrentFrame(float frame); // 0x80163910
+			void setSpeed(float speed); // 0x80163920
+			bool isDone(); // 0x80163930
+	};
+
+	class Anm_c {
+		public:
+			FrameCtrl_c *frameCtrlPtr;
+
+			AnmResHandler_c *resHandler; // ? 0x04
+			AnmResHandler_c::Thing *thing; // 0x08
+			u8 flags; // 0x0C - |1 = enabled successfully?
+
+			FrameCtrl_c frameCtrl; // 0x10
+
+			// too lazy to list the methods for this atm
+			// after IDA reverted all the changes I made to the DB this
+			// afternoon ...
+	};
+
+	class EmbedLayoutBase_c : public Base_c {
+	public:
+		EmbedLayoutBase_c();
+		~EmbedLayoutBase_c();
+
+		void draw(); // don't call this directly
+
+		virtual void update();
+		virtual bool build(const char *brlytPath, ResAcc_c *resAcc = 0);
+
+		nw4r::lyt::Pane *getRootPane();
+		nw4r::lyt::Pane *findPaneByName(const char *name) const;
+		nw4r::lyt::TextBox *findTextBoxByName(const char *name) const;
+		nw4r::lyt::Picture *findPictureByName(const char *name) const;
+		nw4r::lyt::Pane *findWindowByName(const char *name) const;
+
+		void animate();
+		void calculateMtx();
+
+		nw4r::lyt::Layout layout; // 0x10 -- actually m2d::Layout_c but I'll add that later
+		nw4r::lyt::DrawInfo drawInfo; // 0x30
+		ResAcc_c *resAccPtr; // 0x84 -- a ResAcc? referenced in Build()
+		float posX; // 0x88
+		float posY; // 0x8C
+		float clipX; // 0x90
+		float clipY; // 0x94
+		float clipWidth; // 0x98
+		float clipHeight; // 0x9C
+		bool clippingEnabled; // 0xA0
+		u32 hasAnimations; // 0xA4
+		u32 unk_A8; // 0xA8
+	};
+
+	class EmbedLayout_c : public EmbedLayoutBase_c {
+	public:
+		EmbedLayout_c();
+		~EmbedLayout_c();
+
+		bool build(const char *brlytPath, ResAcc_c *resAcc = 0);
+
+		bool loadArc(const char *name, bool isLangSpecific);
+		bool loadArc(const char *name, u8 unk, bool isLangSpecific);
+
+		bool loadArcForRegion(const char *name); // uses EU/Layout/$name
+
+		// there's also a NedEU one, but should it really be listed here...?
+
+		bool free();
+
+		// does NSMBW even use consts? I have no idea. maybe not
+
+		void getPanes(const char **names, nw4r::lyt::Pane **output, int count) const;
+		void getWindows(const char **names, nw4r::lyt::Pane **output, int count) const; // TODO: change to others
+		void getPictures(const char **names, nw4r::lyt::Picture **output, int count) const;
+		void getTextBoxes(const char **names, nw4r::lyt::TextBox **output, int count) const;
+
+		void setLangStrings(const char **names, const int *msgIDs, int category, int count);
+
+		void loadAnimations(const char **names, int count);
+		void loadGroups(const char **names, const int *animLinkIDs, int count);
+
+		void enableNonLoopAnim(int num, bool goToLastFrame = false);
+		void enableLoopAnim(int num);
+		void resetAnim(int num, bool goToLastFrame = false);
+		void disableAnim(int num);
+		void disableAllAnimations();
+
+		bool isAnimOn(int num = -1);
+		bool isAnyAnimOn();
+
+		void execAnimations();
+
+		ResAccLoader_c loader; // 0xAC
+		AnmResHandler_c *brlanHandlers; // 0x180
+		Anm_c *grpHandlers; // 0x184
+		bool *animsEnabled; // 0x188
+		int brlanCount; // 0x18C
+		int grpCount; // 0x190
+		int lastAnimTouched; // 0x194
+
+	private:
+		void fixTextBoxesRecursively(nw4r::lyt::Pane *pane);
+	};
+}
+
+
+extern "C" float fmod(float, float);
+bool RectanglesOverlap(Vec *bl1, Vec *tr1, Vec *bl2, Vec *tr2);
+
+
+/* Tilemap related stuff */
+class TilemapClass {
+	public:
+		virtual ~TilemapClass();
+
+		u16 *allocatedBlocks[256];
+		u32 _404;
+
+		u8 blockLookup[2048];
+
+		u16 blockCount;
+
+		u32 _C0C;
+		u32 ts1ID, ts2ID, ts3ID, layerID, areaID, frmHeap, is2Castle;
+
+		// Only the public API is listed
+		u16 *getPointerToTile(int x, int y, u32 *blockNum = 0, bool unkBool = 0);
+		// TODO: more?
+};
+
+class BGDatClass {
+	public:
+		BGDatClass();
+		virtual ~BGDatClass();
+
+		u8 *bgData[4][3];
+		TilemapClass *tilemaps[4][3];
+		u8 *tsObjIndexData[4][4];
+		u8 *tsObjData[4][4];
+		char tsNames[4][4][0x20];
+		// this is fucked up!
+		// the parent heap is frmHeaps[0][0]
+		// each tileset's heap is frmHeaps[AREA][LAYER+1]
+		void *frmHeaps[4][4];
+
+		static BGDatClass *instance; // 8042A0D0
+
+		// I've only listed the public API because other stuff isn't really needed atm.
+		const char *getTilesetName(int area, int number);
+		// TODO: more?
+};
+
+struct BGRender {
+	u8 unk[0xC00];
+	u8 *objectData;
+	u8 _C04, _C05;
+	u16 _C06, _C08;
+	u16 blockNumber;
+	u16 curX, curY;
+	u16 tileToPlace;
+	u16 objDataOffset, objType, objX, objY, objWidth, objHeight;
+	u16 tileNumberWithinBlock, areaID;
+};
+
+// A HACK
+extern void *DVDClass;
+extern "C" u8 *GetRes(void *Something, const char *arcname, const char *filename);
+
+// Use THESE instead, until I write something up for dRes or dRes_c or whatever the fuck it's called
+
+inline u8 *getResource(const char *arcName, const char *fileName) {
+	return GetRes((void*)(((u8*)DVDClass)+4), arcName, fileName);
+}
+
+inline void scaleDown(Vec* scale, float amt) { scale->x -= amt; scale->y -= amt; scale->z -= amt; }
+inline void scaleUp(Vec* scale, float amt) { scale->x -= amt; scale->y -= amt; scale->z -= amt; }
+
+
+void ConvertStagePositionToScreenPosition(Vec2 *screen, Vec *stage);
+
+
+class SoundPlayingClass /* : public something */ {
+public:
+	// Size: 0x17C
+
+	void PlaySoundAtPosition(int id, Vec2 *pos, u32 flags); // 80198D70
+
+	static SoundPlayingClass *instance1; // 8042A03C
+	static SoundPlayingClass *instance2; // 8042A03C
+	static SoundPlayingClass *instance3; // 8042A03C
+};
+
+
+class dEffectBreakBase_c {
+	// TODO (not really needed, though)
+};
+
+class dEffectBreakMgr_c {
+	public:
+		static dEffectBreakMgr_c *instance;
+
+		dEffectBreakMgr_c();
+		~dEffectBreakMgr_c();
+
+		void execute();
+		void draw();
+
+		bool spawnTile(Vec *position, u32 settings, char param);
+		// Settings:
+		// (BlockType << 8) | (HalfSpeedFlag << 4) | (VelocityChange & 3)
+		//
+		// Types:
+		// 0=Brick, 1=Stone, 2=Wood, 3=Question, 4=Used
+		// 5=Red, 6=Used, 7=Unused, 8=Final Battle
+
+		bool spawnIcePiece(Vec *position, u32 settings, char param);
+
+		// Three more still need to be REed
+
+	private:
+		bool prepare(dEffectBreakBase_c *ef, Vec *pos, u32 settings, u8 param);
+		void cleanup();
+		void cleanupAll();
+};
+
+namespace EGG {
+	class Effect7C {
+		public:
+			virtual ~Effect7C();
+			virtual void clear();
+
+			u8 data[0x94];
+	};
+
+	class Effect {
+		public:
+			Effect(); // 802D7D90
+			virtual ~Effect();
+
+			char effectName[32];
+			u32 secondVarFromSpawnFunc;
+			u32 flags; // 1 = has translation, 2 = matrix was set, 4 = ?
+
+			float _2C, _30, _34;
+			Vec translate;
+			Mtx matrix;
+
+			u32 HandleBase_00, HandleBase_04;
+
+			Effect7C ef7C;
+
+			virtual bool _vf0C();
+			virtual void _vf10(); // related to RetireEmitterAll?
+			virtual void _vf14(); // also related to RetireEmitterAll?
+			virtual void _vf18(); // related to RetireEmitterAll and RetireParticleAll?
+			virtual void _vf1C(bool flag); // sets or clears some flag
+			virtual void _vf20(bool flag); // sets or clears another flag
+			virtual void _vf24(bool flag); // sets or clears both of those flags
+
+			// all these functions have a strange purpose
+			// _vf54 is the one sole exception to everything written below!
+			//
+			// they all call through to ef7C methods, which modify two bitfields stored in it:
+			// void EGG::Effect7C::modifyBitfields(u32 mask, u32 flagBit) {
+			//     if (flagBit & 1)
+			//         this->_04 |= mask;
+			//     else
+			//         this->_04 &= ~mask;
+			//     if (flagBit & 2)
+			//         this->_08 |= mask;
+			//     else
+			//         this->_08 &= ~mask;
+			// }
+			// after that, the methods set value(s) passed by the caller
+			virtual void _vf28(u16 unk, u32 flagBit);		// flag is 1, value stored to its 0xC
+			virtual void _vf2C(float unk, u32 flagBit);		// flag is 2, value stored to its 0x10
+			virtual void _vf30(u16 unk, u32 flagBit);		// flag is 4, value stored to its 0x14
+			virtual void _vf34(u16 unk, u32 flagBit);		// flag is 8, value stored to its 0x16
+			virtual void _vf38(char unk, u32 flagBit);		// flag is 0x10, value stored to its 0x18
+			virtual void _vf3C(float unk, u32 flagBit);		// flag is 0x20, value stored to its 0x1C
+			virtual void _vf40(float unk, u32 flagBit);		// flag is 0x40, value stored to its 0x20
+			virtual void _vf44(float unk, u32 flagBit);		// flag is 0x80, value stored to its 0x24
+			virtual void _vf48(float unk, u32 flagBit);		// flag is 0x100, value stored to its 0x28
+			virtual void _vf4C(Vec *unk, u32 flagBit);		// flag is 0x200, values stored at its 0x2C
+			virtual void _vf50(Vec *unk, u32 flagBit);		// flag is 0x400, values stored at its 0x38
+			virtual void _vf54(Vec *unk);
+			virtual void _vf58(u8 r, u8 g, u8 b, u8 a, u32 flagBit);	// flag is 0x1000, value stored to its 0x44
+
+			// this one is similar, but it stores two colours into an array at 0x48
+			// alpha values are ignored
+			// valid indices are 0 and 1 afaics?
+			// flag is 0x2000 << index (so, 0x2000 or 0x4000)
+			virtual void _vf5C(GXColor one, GXColor two, int index, u32 flagBit);
+
+			// this one sets the alpha for those colours
+			// flag is 0x8000 or 0x10000
+			virtual void _vf60(u8 one, u8 two, int index, u32 flagBit);
+
+			virtual void _vf64(Vec2 *vec, u32 flagBit);		// flag is 0x20000, values stored at its 0x58
+			virtual void _vf68(Vec2 *vec, u32 flagBit);		// flag is 0x40000, values stored at its 0x60
+			virtual void _vf6C(Vec *vec, u32 flagBit);		// flag is 0x80000, values stored at its 0x68
+			virtual void _vf70(Vec *vec, u32 flagBit);		// flag is 0x100000, values stored at its 0x74
+
+			// a bit of a special case: this one will set/clear 0x10000000 depending on flagBit
+			// but it'll also set 0x20000000 if anotherFlag is true
+			// if anotherFlag is false, it'll clear 0x20000000 even if flagBit is set
+			// values stored at ef7C's 0x80
+			virtual void _vf74(Vec *vec, bool anotherFlag, u32 flagBit);
+
+			virtual void _vf78(Vec *vec, u32 flagBit);		// flag is 0x40000000, values stored at its 0x8C
+
+			virtual void _vf7C(Vec *one, Vec2 *two=0); // sets transformation vals and calls vf68
+
+			// stores to _2C, _30, _34
+			virtual void setXformValsFromParams(float one, float two, float three);
+			virtual void setXformValsFromVEC3(Vec *vec);
+
+			virtual void setTranslationFromVEC3(Vec *vec);
+			virtual void setMatrix(Mtx *mtx);
+
+			virtual void _vf90(/* ??? */); // absolutely zero idea what this does
+
+			virtual void makeItHappen(); // for internal use?
+
+			virtual void clear(); // resets all properties, etc
+	};
+}
+
+namespace mEf {
+	class effect_c : public EGG::Effect {
+		public:
+			~effect_c();
+
+			void clear();
+
+			virtual bool probablyCreateWithName(const char *name, u32 unk);
+			virtual bool spawn(const char *name, u32 unk, const Vec *pos=0, const S16Vec *rot=0, const Vec *scale=0);
+			virtual bool spawnWithMatrix(const char *name, u32 unk, const Mtx *mtx);
+
+			// these two deal with mEf::effectCB_c and crap. absolutely no idea.
+			virtual bool _vfA8(/* tons and tons of params */);
+			virtual bool _vfAC(/* a slightly smaller amount of params */);
+
+			virtual bool _vfB0(const Vec *pos=0, const S16Vec *rot=0, const Vec *scale=0);
+			virtual bool _vfB4(const Mtx *mtx);
+	};
+
+	// aka levelEffect_c
+	class es2 : public effect_c {
+		public:
+			// vtable: 80329CA0
+			~es2();
+
+			void _vf10();
+			void _vf18();
+
+			void makeItHappen();
+			bool probablyCreateWithName(const char *name, u32 unk);
+			bool spawn(const char *name, u32 unk, const Vec *pos=0, const S16Vec *rot=0, const Vec *scale=0);
+			bool spawnWithMatrix(const char *name, u32 unk, const Mtx *mtx);
+			bool _vfB0(const Vec *pos=0, const S16Vec *rot=0, const Vec *scale=0);
+			bool _vfB4(const Mtx *mtx);
+
+			virtual u8 returnField11D(); // does exactly what it says on the tin
+
+			u32 _114, _118;
+			u8 _11C, _11D;
+			u32 _120, _124;
+	};
+}
+
+struct SSM { short width, height; float xScale, yScale; };
+extern SSM ScreenSizesAndMultipliers[3];
+extern int currentScreenSizeID;
+
+extern float GlobalScreenWidth, GlobalScreenHeight;
+
+void DoSceneChange(u16 name, u32 sceneSettings, bool exitingStage);
+
+// store types:
+// 0 - keep everything (level beat)
+// 1 - lose everything (level lost)
+// 2 - lose everything, return to state prior to the level (level exited)
+void ReturnToAnotherSceneAfterLevel(u16 name, u32 sceneSettings, int powerupStoreType, int fadeType);
+
+extern u32 GlobalTickCount;
+
+// A hack, imported from tilesetfixer.cpp
+extern void *BGDatClass, *StagePtr;
+inline int GetZoneNum() {
+	char *st = (char*)StagePtr;
+	return st[0x120F];
+}
+inline int GetAreaNum() {
+	char *st = (char*)StagePtr;
+	return st[0x120E];
+}
+
+inline u8 *GetStaffCreditScore() {
+	char *thing = ((char*)StagePtr) + 0x11FC;
+	return *((u8**)thing);
+}
+
+
+
+class ClassWithCameraInfo {
+	public:
+		ClassWithCameraInfo();
+		virtual ~ClassWithCameraInfo();
+
+		// Not quite sure what this is for, stores bitflags for each tile or something?
+		void initBitfields();
+		void deinitBitfields();
+		void deleteOneBitfield(int area, int layer);
+
+		u16 getBitfieldPart(int area, u16 entryIndex, int layer);
+		void setBitfieldPart(int area, u16 entryIndex, int layer, u16 value);
+
+
+		void setSomeInitialVars();
+
+		void s_80082180(); // sets initedTo2 to 0, 1 or 2 depending on the X position
+		void s_800821E0(); // same thing for field_81
+
+		float getEffectiveScreenLeft(); // takes wrap into account
+
+
+		u16 *tileBitfields[12];
+		float _34, screenLeft, screenTop, screenWidth, screenHeight;
+		float screenCentreX, screenCentreY;
+
+		float _50, _54, _58, _5C, _60, _64, _68, _6C, _70, _74;
+		float xOffset, yOffsetForTagScroll;
+
+		u8 initedTo2, _81;
+		u32 _84, _88, _8C, _90;
+		void *bgHeap;
+
+
+		static ClassWithCameraInfo *instance;
+
+		// That is all
+};
+
+
+namespace mHeap {
+	extern void *archiveHeap;
+	extern void *commandHeap;
+	extern void *dylinkHeap;
+	extern void *assertHeap;
+	extern void *gameHeaps[3];
+};
+
+void WriteNumberToTextBox(int *number, const int *fieldLength, nw4r::lyt::TextBox *textBox, bool unk); // 800B3B60
+void WriteNumberToTextBox(int *number, nw4r::lyt::TextBox *textBox, bool unk); // 800B3BE0
+
+namespace EGG {
+	class MsgRes {
+		private:
+			const u8 *bmg, *INF1, *DAT1, *STR1, *MID1, *FLW1, *FLI1;
+		public:
+			MsgRes(const u8 *bmgFile, u32 unusedParam); // 802D7970
+			virtual ~MsgRes();
+
+			static void parseFormatCode(wchar_t initialTag, const wchar_t *string, u8 *outArgsSize, u32 *outCmd, const wchar_t **args); // 802D7B10
+
+			const wchar_t *findStringForMessageID(int category, int message) const; // 0x802D7B50
+
+		private:
+			void setBMG(const u8 *ptr); // 802D7B90
+			void setINF(const u8 *ptr); // 802D7BA0
+			void setDAT(const u8 *ptr); // 802D7BB0
+			void setSTR(const u8 *ptr); // 802D7BC0
+			void setMID(const u8 *ptr); // 802D7BD0
+			void setFLW(const u8 *ptr); // 802D7BE0
+			void setFLI(const u8 *ptr); // 802D7BF0
+			int identifySectionByMagic(u32 magic) const; // 802D7C00
+
+		protected:
+			struct INFEntry {
+				u32 stringOffset;
+			};
+			const INFEntry *findINFForMessageID(int category, int message) const; // 802D7C90
+			u32 getEntryFromMID(int index) const; // 802D7D70
+	};
+}
+namespace dScript {
+	class Res_c : public EGG::MsgRes {
+		public:
+			Res_c(const u8 *bmgFile, u32 unusedParam); // 800CE7F0
+			~Res_c();
+
+			u16 getCharScaleForMessageID(int category, int message) const; // 800CE890
+			u8 getFontIDForMessageID(int category, int message) const; // 800CE8C0
+	};
+}
+class MessageClass {
+	public:
+		dDvdLoader_c loader;
+		void *rawBmgPointer;
+		dScript::Res_c *msgRes;
+};
+
+dScript::Res_c *GetBMG(); // 800CDD50
+const wchar_t *GetBMGMessage(int category, int message);
+void WriteBMGToTextBox(nw4r::lyt::TextBox *textBox, dScript::Res_c *res, int category, int message, int argCount, ...); // 0x800C9B50
+
+extern "C" dAc_Py_c* GetSpecificPlayerActor(int number);
+extern "C" dStageActor_c *CreateActor(u16 classID, int settings, Vec pos, char rot, char layer);
+extern "C" dStageActor_c *Actor_SearchByID(u32 actorID);
+
+struct DoSomethingCool {
+	u32 unk_01; //0000
+	Vec3 pos;  //0004
+	Vec3 scale; //0010
+	f32 unk_02; //001C
+	f32 unk_03; //0020
+	f32 unk_04; //0024
+	f32 unk_05; //0028
+	f32 unk_06; //002C
+	f32 unk_07; //0030
+	f32 unk_08; //0034
+	f32 unk_09; //0038
+};
+
+struct IceActorSpawnInfo {
+	// fuck that, we don't actually need it
+	//~IceActorSpawnInfo();
+	u32 flags;
+	Vec3 pos, scale;
+	f32 what[8];
+};
+
+extern "C" u8 dSprite_c__getXDirectionOfFurthestPlayerRelativeToVEC3(dEn_c *, Vec pos);
+extern "C" void *ShakeScreen(void *, unsigned int, unsigned int, unsigned int, unsigned int);
+extern "C" void *PlaySoundAsync(dStageActor_c *, int soundID);
+extern "C" u32 GetActivePlayerCount();
+
+#include "newer.hpp"
+
+class BGGMEffectRenderer : public m3d::proc_c {
+	private:
+		u32 effectGroupID;
+	public:
+		~BGGMEffectRenderer();
+		void drawOpa();
+		void drawXlu();
+		virtual bool setupEffectRenderer(mAllocator_c *allocator, int opaPrio, int xluPrio, int groupID);
+};
+
+void CleanUpEffectThings();
+bool FreeEffects(int efNum);
+bool FreeBreff(int efNum);
+bool FreeBreft(int efNum);
+
+
+// a bad hack
+extern "C" void Pause__Q44nw4r3snd6detail10BasicSoundFbi(void *_this, bool pause, int count);
+extern "C" void Stop__Q44nw4r3snd6detail10BasicSoundFi(void *_this, int unk);
+extern "C" void StrmSound_SetTrackVolume(void *_this, u32 mask, int count, float value);
+extern "C" void SetPitch__Q44nw4r3snd6detail10BasicSoundFf(void *_this, float value);
+extern "C" void SetVolume__Q44nw4r3snd6detail10BasicSoundFfi(void *_this, float value, int count);
+
+namespace nw4r {
+	namespace snd {
+		class SoundHandle {
+			protected:
+				void *data;
+			public:
+				SoundHandle() { data = 0; }
+				~SoundHandle() { DetachSound(); }
+
+				bool Exists() { return (data != 0); }
+				void Stop(int unk) { Stop__Q44nw4r3snd6detail10BasicSoundFi(data, unk); }
+
+				void SetPitch(float value) { SetPitch__Q44nw4r3snd6detail10BasicSoundFf(data, value); }
+				void Pause(bool pause, int count) { Pause__Q44nw4r3snd6detail10BasicSoundFbi(data, pause, count); }
+
+				void SetVolume(float value, int count) { SetVolume__Q44nw4r3snd6detail10BasicSoundFfi(data, value, count); }
+
+				void *GetSound() const { return data; }
+
+				void DetachSound();
+		};
+
+		class StrmSoundHandle : public SoundHandle {
+			public:
+				void SetTrackVolume(u32 mask, int count, float value) { StrmSound_SetTrackVolume(data, mask, count, value); }
+		};
+	}
+}
+
+extern "C" nw4r::snd::SoundHandle *PlaySound(dStageActor_c *, int soundID);
+
+extern float EnemyBounceValue;
+
+// players used for layouts like StockItem and CharacterChange
+class da2DPlayer_c : public dActor_c {
+public:
+	dPlayerModelHandler_c *model;
+	dStateWrapper_c<da2DPlayer_c> state;
+	u8 nmSndObjBase[0x64];
+
+	float _1CC, _1D0, _1D4, _1D8;
+	nw4r::snd::SoundHandle soundHandles[6];
+	u8 unk[0x20];
+
+	int setToFive, setToSix;
+	u8 _21C, _21D, _21E, _21F;
+	Vec someVec;
+	u8 unk2[0xC];
+
+	int playerPowerup;
+	u32 _23C, _240, _244;
+	int playerID;
+	float _24C;
+	u8 unk4[8];
+
+	float _258, _25C;
+	bool hasLoaded, shouldDraw;
+	u8 _262[7], _269, _26A, _26B;
+
+	EGG::Effect effect;
+	u8 _380, _381, _382, _383;
+
+	// new
+	dShellRenderer_c *shellRenderer;
+	
+	void loadPlayer(); 
+	void specialDraw1();
+
+	void loadShell();
+
+	void newDtor();
+
+	static da2DPlayer_c *newClassInit();
+};
+
+class daWMItem_c : public dActor_c {
+public:
+	mHeapAllocator_c allocator;
+	m3d::mdl_c model;
+	m3d::anmChr_c anmChr;
+	int resFile;
+	void *model_res;
+	int resAnmTexPat;
+	m3d::anmTexPat_c anmTexPat;
+	Vec itemScale;
+	int currentAnimID, animIDToSwitchTo;
+	bool isLoaded, isVisible, needsToBeDrawnThisFrame, usesZas200;
+	int itemNumber;
+
+	void setupModelThings(); // 0x808D4F40
+};
+
+class dStockItemShadow_c; // forward declaration
+
+class dStockItem_c : public dBase_c {
+public:
+	u32 _70;
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dStockItem_c> state;
+
+	nw4r::lyt::Pane
+		*rootPane,
+		*N_forUse_PPos[4],
+		*N_icon[7],
+		*N_stockItem, *N_stockItem_01,
+		*N_itemSelect_00;
+	nw4r::lyt::Picture
+		*P_icon[7],
+		*P_buttonBase[7],
+		*P_iconBase[10];
+
+	da2DPlayer_c *player2d[4];
+	daWMItem_c *itemPtr[7];
+	dStockItemShadow_c *shadow;
+	int actionTaken;
+	u32 _318, _31C, _320, _324;
+	int usedItem;
+	EGG::Effect effectArray[4], oneEffect;
+	int effectIDs[4];
+	int selectedItem, previousItem;
+	u32 _8A8, _8AC;
+	int playerCount, counts[7];
+	u32 _8D0;
+	int someAnimID;
+	bool isPlayerActive[4], layoutLoaded, show, _8DE;
+
+	// new
+	daWMItem_c *newItemPtr[STOCK_POWERUP_COUNT];
+	int newCounts[STOCK_POWERUP_COUNT];
+	nw4r::lyt::Picture *newButtonBase[STOCK_POWERUP_COUNT];
+	nw4r::lyt::Pane *newIconPanes[STOCK_POWERUP_COUNT];
+	nw4r::lyt::Picture *newIconPictures[STOCK_POWERUP_COUNT];
+
+
+	int onCreate();
+	bool loadLayout();
+
+	void setScalesOfSomeThings();
+	int getIconPictureIDforPlayer(int i);
+
+	void updateCursor();
+	void updateSelectOrder(int *count);
+
+	void storeCountToShadow(int count, int idx);
+	void setupButtonEffect();
+	void useItem();
+	int canUsePowerup();
+
+	void initializeState_WindowOpenAnimeEndWait();
+	void executeState_WindowOpenAnimeEndWait();
+	void initializeState_ButtonChangeAnimeEndWait();
+	void initializeState_HitAnimeEndWait();
+	void finalizeState_WindowCloseAnimeEndWait();
+
+	USING_STATES(dStockItem_c);
+	REF_NINTENDO_STATE(ButtonChangeAnimeEndWait);
+	REF_NINTENDO_STATE(ItemSelectWait);
+};
+
+class dStockItemShadow_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox *textBoxes[14];
+	nw4r::lyt::Picture *buttonBases[7];
+	bool layoutLoaded, visible, needsUpdate;
+	u8 pad;
+
+	int counts[STOCK_POWERUP_COUNT]; // first 7 are part of original class
+
+	// new
+	nw4r::lyt::TextBox *newX[STOCK_POWERUP_COUNT];
+	nw4r::lyt::TextBox *newValue[STOCK_POWERUP_COUNT];
+	nw4r::lyt::Picture *newButtonBase[STOCK_POWERUP_COUNT];
+
+	bool loadLayout();
+	void update();
+};
+
+
+// entries that end with "prompt" have both buttons, others only have 1
+enum YesNoWindowTypes {
+	SAVE_DATA_CREATED = 0,
+	SAVE_PROMPT,
+	SAVE_COMPLETE,
+	EXIT_FREE_MODE_PROMPT,
+	PLAY_HINT_MOVIE_PROMPT,
+	SKIP_COURSE, // only has OK button, despite being a question
+	PURCHASE_HINT_MOVIE_PROMPT,
+	GOT_STAR_COINS_IN_WORLD,
+	GOT_STAR_COINS_UNLOCK_W9_STAGE, // mentions a new W9 stage being unlocked
+	BOWSER_JR_LETTER,
+	RETURN_TO_TITLE_PROMPT,
+	BOWSER_JR_LETTER_MULTIPLAYER,
+	RETURN_TO_MAP_PROMPT,
+	RETURN_MP_COURSE_SELECT_PROMPT,
+	GOT_STAR_COINS_ALL_WORLDS,
+	QUICK_SAVE_PROMPT,
+	QUICK_SAVE_COMPLETE,
+	ALL_TOAD_HOUSES_REAPPEARED,
+	ITEMS_HINT,
+	TRY_WITHOUT_SUPER_GUIDE_PROMPT,
+	SKIP_COURSE_PROMPT,
+	EVERYTHING_CLEAR,
+	SAVE_AFTER_BOWSER_CLEAR,
+	ACTIVATE_W3_SWITCH,
+	DEACTIVATE_W3_SWITCH,
+	EXIT_COIN_BATTLE_PROMPT,
+	RETURN_TO_MAP_PROMPT_2,
+	PEACH_CASTLE_MESSAGE,
+	PEACH_CASTLE_MESSAGE_2,
+	// start of custom entries
+	EXIT_VIDEO_MENU,
+};
+
+class dYesNoWindow_c : public dBase_c {
+	public:
+		int onCreate();
+		int onDelete();
+		int onExecute();
+		int onDraw();
+
+		dYesNoWindow_c();
+		~dYesNoWindow_c();
+
+		m2d::EmbedLayout_c layout;
+		dStateWrapper_c<dYesNoWindow_c> state;
+
+		nw4r::lyt::Pane *rootPane;
+
+		nw4r::lyt::Picture
+			*P_yesBase_00, *P_noBase_00, *P_centerBase_00;
+
+		nw4r::lyt::TextBox
+			*T_questionS_00, *T_question_00,
+			*T_otehonTextS_01, *T_otehonText_01,
+			*T_needCoinX_00, *T_needCoin_00,
+			*T_yes_00, *T_yes_01,
+			*T_no_00, *T_no_01;
+
+		nw4r::lyt::Pane *N_otehonText_00, *N_saveIcon_00;
+
+		int current, previous, type, starCoinRequiredCount;
+		bool layoutLoaded, visible, close, animationActive, keepOpen, cancelled, hasBG; // hasBG might actually be opposite
+
+		void newLoadThings();
+};
+
+
+class daBossDemo_c;
+
+// formerly StageE4
+class dActorMng_c {
+public:
+	struct ActorMngSmall {
+		u8 field_0, field_1, field_2;
+	};
+
+	struct ActorMngSub {
+		Vec position;
+		u32 isEnabled;
+	};
+
+	ActorMngSmall fields[4];
+	u8 platformCounter; // used for z positioning in the platform generator
+	u8 currPlayerID, nextPlayerID, _F;
+	u32 _10, isExitingBossDemo;
+	daBossDemo_c *currentBossDemo;
+
+	void *kazanMgr;
+	u32 autoscroolSwichID, stopSpawningEnemies, goombaZOrderThing;
+	u32 liquidDirection, enableVolcanoEruptions, _34, lakituCloudSinks;
+	u32 isEnteringAmbush;
+
+	u8 playerIDCopy, pad[3];
+	float flagpoleXPos;
+
+	ActorMngSub subs[32];
+
+	static dActorMng_c *instance; // 0x8042A020
+
+	// 0=normal, 1=?, 2=kill indiscriminately, for ambush levels
+	// just use 0.
+	void killAllEnemiesAtLevelEnd(int type);
+	void spawnCoinJump(const VEC3 &pos, int direction, int coinCount, int layer);
+};
+
+// keeping these so things don't break
+extern void *SelectCursorPointer;
+extern "C" void HideSelectCursor(void *scPtr, int whichOne);
+
+// proper stuff
+class dSelectCursor_c : public dBase_c {
+public:
+	m2d::ResAccLoader_c layoutRes;
+
+	// actual layout
+	class Layout_c {
+		public:
+			m2d::EmbedLayout_c layout;
+
+			nw4r::lyt::Pane *rootPane;
+
+			nw4r::lyt::Picture
+				*P_cursor_00, *P_cursor_01,
+				*P_cursor_02, *P_cursor_03;
+
+			nw4r::lyt::Pane *N_cursor_00,
+				*N_LU_00, *N_RU_00,
+				*N_LD_00, *N_RD_00;
+
+			bool active;
+
+			u64 _1C1; // set to 0 by cancelCursor();
+			u8 unk2[0x9B];
+	};
+
+	// all 5 cursors are identical besides #5 having a drawOrder of 14,
+	// compared to the drawOrder of 147 that the other four have
+	Layout_c layoutSubClass[5];
+
+	bool layoutLoaded;
+	u8 unk[3];
+
+	// calling UpdateSelectCursor will run both of these functions
+	void updateCursor(nw4r::lyt::Pane *target, int cursorID, bool adjustDrawOrder); // 0x8010C900
+	void applyTargetAlpha(nw4r::lyt::Pane *target, int cursorID); // 0x8010CAB0
+
+	void cancel(int cursorID); // 0x8010C890
+
+	static dSelectCursor_c *instance;
+};
+
+// adjustDrawOrder will set it to 152 (default is 147)
+extern "C" void UpdateSelectCursor(nw4r::lyt::Pane *pane, int cursorID, bool adjustDrawOrder);
+extern "C" void CancelSelectCursor(dSelectCursor_c *, int cursorID);
+
+typedef int (*__Player_VF3D4_type)(void*);
+inline int Player_VF3D4(void *self) {
+	VF_BEGIN(__Player_VF3D4_type, self, 245, 0x60)
+		return VF_CALL(self);
+	VF_END;
+}
+
+extern "C" void PlaySoundWithFunctionB4(void *src, nw4r::snd::SoundHandle *handle, int id, int unk);
+extern "C" bool CheckIfPlayingSound(void *src, int id);
+extern void *SoundRelatedClass;
+
+void GetPosForLayoutEffect(VEC3 *pos, bool quack);
+
+bool SmoothRotation(s16 *pValue, s16 target, s16 stepSize);
+
+
+struct PlayerAnimState {
+	const char *regularAnim, *rideAnim, *yoshiAnim, *penguinAnim;
+	int playsOnce;
+	float _14, _18;
+	u32 _1C, flags;
+};
+extern PlayerAnimState PlayerAnimStates[177];
+
+
+class daEnBossKoopaDemoPeach_c : public dEn_c {
+	public:
+		mHeapAllocator_c allocator;
+		int stage;
+		nw4r::g3d::ResFile resFile;
+		m3d::mdl_c model;
+		m3d::anmChr_c chrAnm;
+		m3d::anmTexPat_c patAnm;
+		u8 _mysteryData[0x38];
+		int counter;
+		u16 _628;
+		float _62C;
+		u32 cageID;
+		bool dontCallYet;
+		mEf::es2 effects[1];
+
+
+		int onCreate();
+		int onDelete();
+		int onExecute();
+		int onDraw();
+
+		daEnBossKoopaDemoPeach_c();
+		~daEnBossKoopaDemoPeach_c();
+
+		Vec2 _vf70();
+
+		virtual void beginState_Wait();
+		virtual void executeState_Wait();
+		virtual void endState_Wait();
+		virtual void beginState_Call();
+		virtual void executeState_Call();
+		virtual void endState_Call();
+		virtual void beginState_Turn();
+		virtual void executeState_Turn();
+		virtual void endState_Turn();
+		virtual void beginState_Open();
+		virtual void executeState_Open();
+		virtual void endState_Open();
+		virtual void beginState_Rescue();
+		virtual void executeState_Rescue();
+		virtual void endState_Rescue();
+		virtual void beginState_Thank();
+		virtual void executeState_Thank();
+		virtual void endState_Thank();
+
+		REF_NINTENDO_STATE(Wait);
+		REF_NINTENDO_STATE(Call);
+		REF_NINTENDO_STATE(Turn);
+		REF_NINTENDO_STATE(Open);
+		REF_NINTENDO_STATE(Rescue);
+		REF_NINTENDO_STATE(Thank);
+};
+
+class dStageActorMgr_c {
+	public:
+		int depthCounter1, depthCounter2, depthCounter3, depthCounter4;
+
+		u16 storedShorts[1000];
+		u8 storedBytes[1000];
+
+		u16 _BC8;
+		bool _BCA, dontRunThings;
+		u32 lastScreenLeft, lastScreenTop, _BD4, _BD8;
+
+		static dStageActorMgr_c *instance;
+};
+
+class daBossDemo_c : public dActorState_c {
+	public:
+		int onCreate();
+		int onDelete();
+		int onExecute();
+		int onDraw();
+		void willBeDeleted();
+
+		int counter;
+		u32 _3D4, idOfOtherActor;
+
+		virtual void beginState_Ready();
+		virtual void executeState_Ready();
+		virtual void endState_Ready();
+		virtual void beginState_BattleStDemo();
+		virtual void executeState_BattleStDemo();
+		virtual void endState_BattleStDemo();
+		virtual void beginState_BattleIn();
+		virtual void executeState_BattleIn();
+		virtual void endState_BattleIn();
+		virtual void beginState_BattleEdDemo();
+		virtual void executeState_BattleEdDemo();
+		virtual void endState_BattleEdDemo();
+
+		virtual bool beatLevel();
+		virtual void exitLevel();
+
+		virtual void beginSomething() { }
+		virtual void endSomething() { }
+
+		virtual u32 getIdOfOtherActor() { return idOfOtherActor; }
+		virtual void setIdOfOtherActor(int id) { idOfOtherActor = id; }
+
+		virtual bool vf128() { return false; }
+		virtual u32 justReturnField3D4_decidesIfEndBattle() { return _3D4; }
+		virtual bool vf130() { return true; }
+
+		virtual dStageActor_c *getActorPointerForSomething() { return 0; }
+
+		virtual void init();
+
+		USING_STATES(daBossDemo_c);
+		REF_NINTENDO_STATE(Ready);
+		REF_NINTENDO_STATE(BattleStDemo);
+		REF_NINTENDO_STATE(BattleIn);
+		REF_NINTENDO_STATE(BattleEdDemo);
+};
+
+class BalloonRelatedClass {
+	public:
+		static BalloonRelatedClass *instance;
+
+		u32 ___[0x20];
+		u32 _20;
+};
+
+// formerly Stage80
+class dQuake_c {
+public:
+	float speed, result, multiplier, accel, min;
+	float speed2, result2, multipler2, accel2, min2; // hahahahaah, it is even FUNNIER the second time!
+
+	Vec2 screenOffset;
+	u32 flag; // &1 = dEn_c::add2ToYSpeed(), &2 = pow, &4 = mpgp
+	u32 _34;
+	bool quakeOn;
+	u8 playerID, pad[2];
+	int lengthOfPOW, lengthOfMPGP; // MultiPlayerGroundPound
+
+	static dQuake_c *instance; // 0x8042A2E8
+};
+
+extern void *_8042A788;
+extern "C" void sub_8019C390(void *, int);
+extern "C" bool SpawnEffect(const char*, int, Vec*, S16Vec*, Vec*);
+
+// formerly StageC4
+class PauseManager_c {
+public:
+	void *vtable;
+	u32 stageNum, selection, playerNum, _10, cancelSelection;
+	u8 flags;
+	bool buttonAnimPlaying, exitingMenu, willDisplay, _1C, disablePause;
+	u16 pad;
+
+	static bool m_Pause; // 0x8042A2C0
+	static PauseManager_c *instance; // 0x8042A2B8
+};
+
+class dCourseClear_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	mEf::es2 effect;
+	dStateWrapper_c<dCourseClear_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Pane *N_marioClear_00;
+
+	bool layoutLoaded, visible, canFinish;
+	u8 pad;
+
+	bool newLoadLayout();
+};
+
+class dGoalManager_c : public dBase_c {
+public:
+	u32 unk;
+	dStateWrapper_c<dGoalManager_c> state;
+	dCourseClear_c *courseClearPtr;
+	int displayTime;
+
+	static dGoalManager_c *instance; // 0x8042A5A4
+};
+
+class dGameDisplay_c : dBase_c {
+	public:
+		m2d::EmbedLayout_c layout;
+		mEf::es2 effect;
+
+		u8 unk[0x60]; // absolutely no idea what this could be
+
+		dStateWrapper_c<dGameDisplay_c> stateMgr;
+
+		u8 m_playNum[4]; // life counters
+		u32 _3D0, _3D4, _3D8;
+		int coins, timer, _3E4, score;
+		int relatedToStarCoins; // set to 3 when setting a coin in onCreate, set to 2 if it is collected
+
+		u32 _3F0, _3F4, _3F8, _3FC, _400, _404, _408;
+
+		// used for a loop that subtracts score/time before updating both counters
+		int countdownInterval;
+		int scoreAddedPerCountdownLoop; // (scoreAddedPerCountdownLoop * countdownInterval) * 2 = score visually added to counter
+
+		u32 _414, _418, _41C, _420, _424, _428, _42C, _430;
+
+		u32 mustAtLeast2ForScoreToCount;
+
+		u32 isPausing, gamePaused, isUnpausing, isCountingScore;
+		bool playerIsControllingSuperGuide, _449, _44A, layoutCreated, completedStage_maybe;
+
+		// related to pane alpha
+		u8 _44D, _44E, _44F, _450, _451;
+
+		bool visible, isCountingScore2;
+
+		bool grayColorSetForLives[4];
+
+		Vec2 actorPos; // player position?
+
+		u32 _460, _464, _468, _46C, _470, _474, _478, _47C, _480, _484, _488, _48C;
+
+		nw4r::lyt::Pane *rootPane; // 0x490
+
+		nw4r::lyt::Picture // 0x494 - 0x4BC
+			*P_collectOff_00, *P_collection_00,
+			*P_collectOff_01, *P_collection_01,
+			*P_collectOff_02, *P_collection_02,
+			*P_marioIcon_00, *P_luijiIcon_00,
+			*P_kinoB_00, *P_kinoY_00;
+
+		// ranges from 0x4BC - 0x4E8
+		nw4r::lyt::TextBox
+			*T_left_00, *T_x_01,
+			*T_left_01, *T_x_02,
+			*T_left_02, *T_x_03,
+			*T_left_03, *T_x_04,
+			*T_coin_00, *T_timer_00, *T_score_00;
+
+		nw4r::lyt::Pane // 0x4E8 - 0x538
+			*N_otasukeInfo_00, *N_otasukeChu_00, *N_left_00, *N_coin_00,
+			*N_collection_00, *N_score_00, *N_areaZanki_00, *N_areaCoin_00,
+			*N_areaScore_00, *N_marioIcon_00, *N_luigiIcon_00, *N_kinoB_00,
+			*N_kinoY_00, *N_coin_01, *N_time_00, *N_proportionL_00,
+			*N_proportionR_00, *N_coin1st_00, *N_coin2nd_00, *N_coin3rd_00;
+
+		// probably not a Vec
+		u32 _538, _53C, _540;
+
+		// these are all Vec3's, even though the Z-pos must always be 0 for panes...
+		Vec leftProportionTrans;
+		Vec rightProportionTrans;
+		Vec otasukeChuTrans;
+		Vec areaZankiTrans;
+		Vec otasukeInfoTrans;
+		Vec areaCoinTrans;
+		Vec areaScoreTrans;
+		Vec timeTrans;
+
+		static dGameDisplay_c *instance;
+
+		// new stuff
+		u8 numFrames;
+
+		// retail functions
+		int onCreate();
+		bool createLayout();
+		int onExecute();
+
+		void restCoinAnimeCheck();
+		void areaCheck();
+		void relatedToPaneAlpha(); // doesn't have a name in ghidra
+
+		void restDispSetup();
+		void sub_801585C0();
+		void otehonPosChange();
+
+		void setPlayNum(u8 *playNum);
+		void setCoinNum(int coins);
+		void setTime(int time);
+		void setScore(int score); // replaced
+
+		// quick note on function names:
+		// if it begins with `setup`, it's ran in the onCreate
+		// if it begins with `update`, it's ran in the onExecute
+
+		void setupLayoutOverrides();
+
+		void updateAnalogClock();
+
+		void doWaitCheck();
+
+		USING_STATES(dGameDisplay_c);
+		REF_NINTENDO_STATE(ProcGoalEnd);
+};
+
+class dEasyPairing_c : public dBase_c {
+public:
+    m2d::EmbedLayout_c layout;
+    dStateWrapper_c<dEasyPairing_c> state;
+
+    nw4r::lyt::Pane *rootPane;
+
+    nw4r::lyt::Picture
+        *P_remoS_03, *P_remoS_00, *P_remoS_01, *P_remoS_02,
+        *P_lamp_00, *P_lamp_01, *P_lamp_02, *P_lamp_03,
+        *P_light_00, *P_light_01, *P_light_02, *P_light_03;
+
+    bool layoutLoaded, visible, _27A, _27B;
+    int remoconFlags_maybe[4], remoconUnk[4], remoconUnk2[4];
+};
+
+// used by many classes and can be cast to a 'sStateFctIf_c'
+class class_8093E698 {
+public:
+	void *vtable;
+};
+
+class dContinue_c : public dBase_c {
+public:
+	class Sub4 {
+	public:
+		void *vtable;
+		dContinue_c *owner;
+		void *unk;
+		u8 someStateThing[0x24];
+	};
+
+	class Sub2 {
+	public:
+		void *vtable;
+		Sub4 sub_4;
+		nw4r::lyt::Pane *rootPane;
+	};
+
+	class Sub {
+	public:
+		void *vtable;
+		class_8093E698 cls;
+		Sub2 sub_2;
+
+		nw4r::lyt::Picture *P_bg_PContinue;
+		nw4r::lyt::Pane *panes[14];
+		nw4r::lyt::TextBox *textboxes[8];
+
+		int total_num_continues_used;
+		int player_num_continues[4], player_num_lives[4];
+		int RestCountUp_counter, wait_counter, wait_counter2;
+
+		bool layoutLoaded, visible, _CA, _CB, player_uses_continue;
+		u8 _D0, _D1, _D2, _D3, _D4, _D5, _D6, _D7;
+	};
+
+	m2d::EmbedLayout_c layout;
+	Sub sub;
+};
+
+// "Everyone Lost!"
+class dDrawGame_c : public dBase_c {
+public:
+    m2d::EmbedLayout_c layout;
+    dStateWrapper_c<dDrawGame_c> state;
+
+    nw4r::lyt::Pane *rootPane;
+    nw4r::lyt::Pane *N_draw_00;
+
+    bool layoutLoaded, exiting, visible, _24F;
+    int timeUntilExit;
+};
+
+class dGameOver_c : public dBase_c {
+public:
+    m2d::EmbedLayout_c layout;
+    dStateWrapper_c<dGameOver_c> state;
+    mEf::es2 effect;
+
+    nw4r::lyt::Pane *rootPane;
+    nw4r::lyt::Pane *N_marioClear_00;
+
+    bool layoutLoaded, animationActive, visible, _377;
+    int timeUntilExit;
+
+    bool newLoadLayout();
+};
+
+class dScGameOver_c : public dScene_c {
+public:
+    dGameOver_c *gameOverPtr;
+    dContinue_c *continuePtr;
+    dDrawGame_c *drawGamePtr;
+    u32 unk; // could be another ptr
+    FunctionChain funcChain;
+    dStateWrapper_c<dScGameOver_c> state;
+    u32 unk2;
+};
+
+class dCourseSelectMenu_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dCourseSelectMenu_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+
+	nw4r::lyt::Picture
+		*P_SBBase_01, *P_SBBase_02, *P_SBBase_03,
+		*P_SBBase_04, *P_back, *P_backWhite;
+
+	nw4r::lyt::TextBox *T_corseSelectS03, *T_corseSelect_03;
+
+	int currentSelection, previousSelection;
+
+	bool layoutLoaded, visible, choiceWasMade, _273;
+	u32 _274;
+
+	// this pane is new!!!
+	nw4r::lyt::Picture *P_SBBase_00;
+
+	int onCreate();
+	int onExecute();
+	int onDraw();
+	// onDelete is at 0x8077AD10 but we don't need it
+
+	bool loadLayout();
+	void setupSelectCursor();
+
+	void beginState_InitWait();
+	void executeState_PauseDisp();
+
+	USING_STATES(dCourseSelectMenu_c);
+	REF_NINTENDO_STATE(InitWait);
+	REF_NINTENDO_STATE(OpenAnimeEndWait);
+	REF_NINTENDO_STATE(ButtonChangeAnimeEndWait);
+	REF_NINTENDO_STATE(PauseDisp);
+	REF_NINTENDO_STATE(HitAnimeEndWait);
+	REF_NINTENDO_STATE(ClouseAnimeEndWait);
+
+	/* states:
+	* InitWait: opens the menu, and sets the state to OpenAnimeEndWait
+	* OpenAnimeEndWait: checks if any animations are enabled. if not, state is set to ButtonChangeAnimeEndWait
+	* ButtonChangeAnimeEndWait: handles button changes and sets the state to PauseDisp
+	* PauseDisp: sets _274 to 1, handles button functionality, can set the state to ButtonChangeAnimeEndWait, HitAnimeEndWait, or ClouseAnimeEndWait depending on the input
+	* HitAnimeEndWait: plays hit anim for current button, once its done, sets _272 to 1, and sets state to ClouseAnimeEndWait
+	* ClouseAnimeEndWait: closes the menu, plays the back sound, sets visible to 0 and rootPane visibility to false, sets state to InitWait
+	*/
+};
+
+#include <levelnumber.hpp>
+
+class dCourseSelectGuide_c {
+public:
+	void *vtable;
+	u32 unk;
+	m2d::EmbedLayout_c layout;
+
+	// state machines
+	dStateWrapper_c<dCourseSelectGuide_c> state_courseInfo, state_guide;
+	
+	dStateWrapper_c<dCourseSelectGuide_c> 
+		state_mapViewScrollUp, state_mapViewScrollDown,
+		state_mapViewScrollLeft, state_MapViewScrollRight;
+
+	dStateWrapper_c<dCourseSelectGuide_c> state_shadow, state_mapView;
+
+	nw4r::lyt::Pane
+		*rootPane, *N_IconPos1P_00, *N_IconPos2P_00, *N_IconPos3P_00,
+		*N_IconPos4P_00, *N_mapArrow_00, *N_proportionL_00, *N_proportionR_00,
+		*N_proportionC_00, *N_guideViewC_00, *N_guideViewR_01, *N_left_00;
+
+	nw4r::lyt::TextBox
+		*T_worldNum_00, *T_cSelect_00, *T_cSelect_pic,
+		*T_lifeNumber_00, *T_lifeNumber_01, *T_lifeNumber_02,
+		*T_lifeNumber_03, *T_guideViewLS_00, *T_guideViewL_01;
+
+	nw4r::lyt::Picture
+		*P_cC_1_00, *P_cC_2_00, *P_cC_3_00, *P_cC_1s_00,
+		*P_cC_2s_00, *P_cC_3s_00, *P_flagSkull_00, *P_marioFace_00,
+		*P_luigiFace_00, *P_BkinoFace_00, *P_YkinoFace_00, *P_bgShadow_00;
+
+	u32 lastControllerTypeUsed, currentWorldNum, currentLevelNum, currentLevelGroup,
+	currentLivesValue[4], timer_WorldCourseOnStageWait, timer_GuideOnStageWait,
+	currentLivesAlpha, isLivesFadedIn;
+
+	u8 keyPressValue;
+	bool layoutLoaded;
+	bool shouldHideLives, shouldHideCourseInfo, hidingCourseInfo, setCourseInfoToLastFrame, hidingGuide, shouldHideGuide;
+	u8 _43C;
+	bool setLivesAndGuideToLastFrame, keyWasPressed, exitingMapView;
+	u8 _440;
+	bool isVisible;
+	bool inhibitHUDShowAndHide;
+	bool showShadow, hideShadow;
+	bool isMapViewExitVisible, enterMapView, exitMapView, enteringMapView;
+	bool animationActive;
+	bool upArrowAnimActive, downArrowAnimActive, leftArrowAnimActive, rightArrowAnimActive;
+	bool livesUpdated;
+	
+	int onDelete(); // 0x80010B40
+	
+	void handleLevelData(LevelNumber param_2, int param_3);
+	void updateLevelDisplay(u32 param);
+
+	void collectionCoinSet(); // 0x80010DD0
+
+	void setupFooterInfo();
+	void setupHeaderInfo();
+
+	static dCourseSelectGuide_c *instance;
+};
+
+class dNumberOfPeopleChange_c : public dBase_c {
+public:
+    u8 unk[4]; // might be an int, idk
+
+    void *ccSelBase[4];     /* dCharacterChangeSelectBase_c */
+    void *ccSelContents[4]; /* dCharacterChangeSelectContents_c */
+    void *ccSelArrow[4];    /* dCharacterChangeSelectArrow_c */
+    void *ccIndicator[4];   /* dCharacterChangeIndicator_c */
+    m2d::ResAccLoader_c ccBaseLayoutRes;
+    m2d::ResAccLoader_c ccSelContentsLayoutRes;
+    m2d::ResAccLoader_c ccSelArrowLayoutRes;
+    m2d::ResAccLoader_c ccIndicatorLayoutRes;
+
+    m2d::EmbedLayout_c layout;
+    dStateWrapper_c<dNumberOfPeopleChange_c> state;
+
+    nw4r::lyt::Pane *rootPane;
+
+    nw4r::lyt::Pane
+        *N_pos1P_00, *N_pos2P_00, *N_pos3P_00, *N_pos4P_00,
+        *N_pos1P_01, *N_pos2P_01, *N_pos3P_01,
+        *N_pos1P_02, *N_pos2P_02,
+        *N_pos2P_01_again;
+
+    nw4r::lyt::TextBox
+        *T_titleNinzuMenu, *T_titleNinzu_00,
+        *T_guide_01, *T_guideS_02;
+
+    nw4r::lyt::Picture
+        *P_yesBase_00, *P_noBase_00,
+        *P_bgShadowST_00, *P_bgST_00,
+        *P_stripeMLT_00, *P_remo1P_Light,
+        *P_remo2P_Light, *P_remo3P_Light,
+        *P_remo4P_Light, *P_base_00,
+        *P_base_01, *P_base01_Menu43;
+
+    nw4r::lyt::Pane *W_button_00, *W_button_00_again;
+
+    da2DPlayer_c *player2d[4];
+
+    u8 unk2[0x20];
+
+    bool layoutLoaded;
+    u8 _67D;
+    bool isCurrentlyActive;
+    u8 field_67F, field_680;
+    bool ccBaseLayoutResLoaded, ccSelContentsLayoutResLoaded, ccSelArrowLayoutResLoaded;
+    u8 field_684; // probably related to some LayoutRes thing, idk
+    bool ccIndicatorLayoutResLoaded;
+
+    u8 _686, field_687, field_688, field_689, _68A, _68B;
+    u32 field_68C, charIdFromInfo[4], countOfInfoCharIdsThatAre3, somethingObtained2,
+    _6A8, _6AC, _6B0, somethingObtained1, _6B8, _6BC, _6C0, idOfSomethingPlus1, activeButtonMaybe;
+
+    u8 unk3[0x14];
+
+    u32 charIdFromGlobal_copy1, charIdFromGlobal_copy2;
+
+    u8 unk4[0x10];
+};
+
+// old
+/*class dCollectionCoin_c : public dBase_c {
+	public:
+	u8 unk[0x420-sizeof(dBase_c)];
+	dStateWrapper_c<dCollectionCoin_c> state; //0x420
+
+	u8 unk2[0x6E8];
+
+	u32 worldNumForEntry; //0xB44
+	u8 unk3[5];
+	bool menuCurrentlyActive; //0xB4D
+
+	USING_STATES(dCollectionCoin_c);
+	REF_NINTENDO_STATE(ExitAnimeEndWait);
+};*/
+
+// Toad's messages
+class dMessageWindow_c : public dBase_c {
+	public:
+		dStateWrapper_c<dMessageWindow_c> state;
+		m2d::EmbedLayout_c lytBase;
+
+		nw4r::lyt::Pane *rootPane;
+		nw4r::lyt::TextBox *T_messages[2];
+		nw4r::lyt::Pane *N_proportion;
+
+		bool filesLoaded, display, _256, _257, _258;
+		u8 pad[3];
+		u32 msgIdIndex;
+};
+
+class dLetterWindow_c : public dBase_c {
+public:
+    dStateWrapper_c<dLetterWindow_c> state;
+    m2d::EmbedLayout_c layout;
+
+    nw4r::lyt::Pane *rootPane;
+    nw4r::lyt::TextBox *T_message_00;
+    nw4r::lyt::Picture *P_line_00;
+
+    bool layoutLoaded, visible, animActive;
+    u8 pad;
+    int playerCount;
+};
+
+
+// forward declarations
+class dCollectionCoin_c;
+class dWorldSelect_c;
+class dWorldSelectGuide_c;
+
+class dCourseSelectManager_c : public dBase_c {
+public:
+	dStateWrapper_c<dCourseSelectManager_c> state;
+
+	dCourseSelectMenu_c	*courseSelectMenuPtr;
+	dNumberOfPeopleChange_c *numberOfPeopleChangePtr;
+	dStockItem_c *stockItemPtr;
+	dStockItemShadow_c *stockItemShadowPtr;
+	dCollectionCoin_c *collectionCoinPtr;
+	dWorldSelect_c *worldSelectPtr;
+	dWorldSelectGuide_c	*worldSelectGuidePtr;
+
+	dCourseSelectGuide_c guide;
+
+	da2DPlayer_c *player2d[4];
+
+	dEasyPairing_c *easyPairingPtr;
+	dContinue_c *continuePtr;
+	dYesNoWindow_c *yesNoWindowPtr;
+	dMessageWindow_c *messageWindowPtr;
+	dLetterWindow_c *letterWindowPtr;
+
+	bool layoutLoaded;
+
+	u8 field_53D;
+	bool doesSomethingWithMenuSelect;
+	bool doesWorldSelect;
+	u8 field_540;
+	bool doesContinueCheckWait;
+	bool doesSaveWindowOpen;
+	u8 field_543;
+	bool doesMsgOpenAnimeEndWait;
+	bool startedSomeMsgThing;
+	bool endedSomeMsgThing;
+	bool doesYesNoWindowOpenAnimeEndWait;
+	bool doesStockItemSelectWait;
+	bool doSetPowerupsInWm2dPlayer;
+	u8 field_54A;
+	u8 field_54B;
+	u8 field_54C;
+	bool doesLetterWindowWait;
+	u8 _54E;
+	u8 _54F;
+
+	int selectedMenuItem; // for pause menu
+	u32 field_554;
+	u32 countdownForSomethingInMenuSelect;
+	u32 somethingCopiedIntoYesNoWindow;
+
+	int powerupID_maybe, field_564, field_568, field_56C;
+
+	static dCourseSelectManager_c *instance;
+
+	void sub_80931170();
+	void sub_809310F0();
+
+	void sub_80931090();
+	void sub_80931110();
+
+	void changeToNormalState();
+
+	void endState_CharacterChangeWait_new();
+	void executeState_PushAnimeEndWait();
+
+	USING_STATES(dCourseSelectManager_c);
+	REF_NINTENDO_STATE(KeyWait);
+	REF_NINTENDO_STATE(PushAnimeEndWait);
+	REF_NINTENDO_STATE(StockItemSelectWait);
+
+	// all of these correspond to CSM options
+	REF_NINTENDO_STATE(CollectionCoinWait);
+	REF_NINTENDO_STATE(CharacterChangeWait);
+	REF_NINTENDO_STATE(InterruptSaveWindowOpen);
+	REF_NINTENDO_STATE(SaveWindowOpen);
+	REF_NINTENDO_STATE(TitleConfirmationWindowOpen);
+};
+
+class sPhase_c {
+public:
+	void *functions;
+	u16 count;
+	u16 current;
+};
+
+class dScWMap_c : public dScene_c {
+public:
+    sPhase_c *initChain;	// 0x74
+    dSelectCursor_c *selectCursorPtr;	// 0x7C
+    void *csvDatas[3][9];	// 0x80
+
+	u32 createBootParam();
+
+	int onDelete();
+
+	static char mWmArcName[6]; // 0x8042A520
+	static u8 mWorldNo; // 0x8042A52D
+	static u8 mSceneNo; // 0x8042A52E
+
+	static dScWMap_c *instance; // 0x8042A514
+};
+
+extern int RouteInfos[9];
+
+/* settings layout:
+ * nybble 10 = wipe type
+ * nybble 11 = level number
+ * nybble 12 = world number
+*/
+u32 AssembleScWorldMapSettings(int worldNum, int levelNum, int wipeType);
+
+// todo: these classes
+class dWmEffectManager_c {
+public:
+	void destroy();
+
+	static dWmEffectManager_c *instance; // 0x8042A54C
+};
+
+class dWmSeManager_c {
+public:
+	void destroy();
+
+	static dWmSeManager_c *instance; // 0x8042A55C
+};
+
+extern "C" void *MapSoundPlayer(void *SoundRelatedClass, int soundID, int unk);
+
+int getNybbleValue(u32 settings, int fromNybble, int toNybble) {
+	int numberOfNybble = (toNybble - fromNybble) + 1;
+	int valueToUse = 48 - (4 * toNybble);
+	int fShit = pow(16, numberOfNybble) - 1;
+	return ((settings >> valueToUse) & fShit);
+}
+
+void getSpriteTexResName(char* buffer, int resID) {
+	sprintf(buffer, "g3d/t%02d.brres", resID);
+	buffer[strlen(buffer)] = 0;
+}
+
+void getSpriteTexResName255(char* buffer, int resID) {
+	sprintf(buffer, "g3d/t%03d.brres", resID);
+	buffer[strlen(buffer)] = 0;
+}
+
+// Used for getting class sizes and such, and other stuff too probably
+#ifndef static_assert
+    // https://stackoverflow.com/a/1597129
+    #define TOKENPASTE(x, y) x ## y
+    #define TOKENPASTE2(x, y) TOKENPASTE(x, y)
+
+    #define static_assert(condition) typedef int TOKENPASTE2(static_assert_, __LINE__)[(condition) ? 1 : -1]
+#endif // static_assert
+
+#ifndef print_sizeof
+    // https://stackoverflow.com/questions/20979565/how-can-i-print-the-result-of-sizeof-at-compile-time-in-c
+    #define print_sizeof(type) char (*__kaboom)[sizeof(type)] = 1
+#endif // static_assert
+
+#define offsetof(type, member)    ((u32) &(((type *) 0)->member))
+
+void assignSomeColoursToWindow(nw4r::lyt::Pane *name, int playerID); // used by pauseWindow/warningManager to assign player colors to a window pane
+
+int calculatePercentage(float currentValue, float maximumValue, bool roundUp) {
+    float result = (currentValue / maximumValue) * 100;
+
+    if (roundUp) result = ceil(result);
+
+    int convResult = static_cast<int>(result);
+    return convResult;
+}
+
+extern bool m_OtasukeAfter;
+
+class dOtasukeInfo_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+    dStateWrapper_c<dOtasukeInfo_c> state;
+
+    nw4r::lyt::Pane *rootPane;
+    nw4r::lyt::TextBox
+        *T_infoS_00, *T_info_00,
+        *T_yes_00, *T_yes_01,
+        *T_no_00, *T_no_01;
+    nw4r::lyt::Picture *P_yesBase_00, *P_noBase_00;
+    bool layoutLoaded, visible, yesSelected, _26B, _26C, _26D, pad[2];
+
+    void writeMessageStrings(); // replacement of 809166A0
+};
+
+class dControllerInformation_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	bool layoutLoaded, visible;
+	u8 pad[2];
+	int stage;
+	// stages:
+	// 0 = doing nothing, 1 = in button, 2 = loop button,
+	// 3 = wait for screen to end, 4 = manually end screen
+
+	bool newLoadLayout();
+};
+
+
+class SndSceneMgr : public EGG::Disposer {
+public:
+	u32 prevSoundSceneId, soundSceneId, _18;
+    u16 bitfield;
+    s8 prevMusicControlFlag;
+    u8 musicControlFlag, trackBitFlag, pad[3];
+    u32 modulation, menuStage, minigameStage;
+    u8 bitfield2, pad2[3];
+    u32 volumeControl;
+    bool isFastMusic, _39, _3A, isToadHouse, somethingDisableStart;
+    bool noFadeIn, disableMusic, isWorldMap;
+    u32 _40;
+    bool bossFlag;
+    u8 pad3[3];
+    void *_48; // List
+    u32 _54;
+
+    /* soundSceneId possible values
+     * 0x0 - 0x10 = idk
+     * 0x11 = stage
+     * 0x12 = game over screen
+     * 0x14 = multiplayer mode fail
+    */
+
+    void openWindow(u32 volumeCtrl); // just use 1, 2, or 4
+    void openWorldSelect(); // runs openWindow with a value of 3
+    void closeWindow();
+    void closeWorldSelect();
+
+    // pauses and starts BGM
+	void pauseGame();
+	void startGame();
+
+    // isRetro determines if it plays the "classic" course clear
+	void startGoal(bool isRetro);
+
+    /* startFanfare sound values:
+     * 0 = tower boss clear (also applies to any value above 6)
+     * 1 = castle boss clear
+     * 2 = airship boss clear
+     * 3 = bridge bowser clear
+     * 4 = final boss clear
+     * 5 = peach saved (kamek fake-out)
+     * 6 = peach saved (real)
+    */
+    void startFanfare(u32 whichFanfare);
+
+    void startMiss();
+    void startMultiAllBubble(); // needs some kind of condition met to play the sound, idk
+
+    void deleteInstance();
+    static SndSceneMgr *createInstance();
+
+	static SndSceneMgr *instance;
+};
+
+// value of 4 means the coin is uncollected
+extern u32 StarCoinStatusArray[3];
+
+// include some game stuff
+#include <dInfo_c.hpp>
+#include <dGameCom.hpp>
+
+// check if the game is running in Dolphin
+#include <IOS.hpp>
+
+bool isDolphin() {
+	int file = IOS_Open("/dev/dolphin", 0);
+    if (file < 0) // not dolphin
+		return false;
+	else // it's dolphin
+		return true;
+}
+
+// only use for the world map or whatever
+void GoToSpecificWorld(u32 worldNum, u32 levelNum);
+
+int GetCurrentWorld();
+
+int GetLevelGroup(LevelNumber level);
+
+// formerly in worldmaphax.cpp
+int getLevelInfoWorldNumber(int world, int subWorld) {
+	/*  for WXa this returns X      (00-07)
+	    for WXb this returns X + 8  (08-15)
+		for WXc this returns X + 16 (16-23)
+	    don't use W9!  */
+	return 8 * subWorld + world;
+}
+
+void setCurrentMusic(u8 id);
+
+void SetCullModeForMaterial(m3d::mdl_c *model, int materialID, u32 cullMode);
+
+class dDateFile_c : public dBase_c {
+public:
+	u32 unk;
+	m2d::EmbedLayout_c layout;
+
+	mEf::es2 efClass0_0, efClass0_1, efClass0_2, efClass0_3, efClass0_4;
+	mEf::es2 efClass1_0, efClass1_1, efClass1_2, efClass1_3, efClass1_4;
+
+	dStateWrapper_c<dDateFile_c> stateThing;
+	u32 nextActionToExecute;
+
+	nw4r::lyt::Pane
+		*rootPane, *N_dateFile_00, *N_dateFile_01,
+		*N_NewFile_00, *N_save, *W_select_00, *W_shadow_00;
+
+	nw4r::lyt::TextBox
+		*T_worldNumber_00, *T_worldNumber_01, *T_x_00, *T_zanki_00,
+		*T_fileNumber_00, *T_fileNumber_01, *T_NewdateFile_00, *T_NewdateFileS;
+
+	nw4r::lyt::Picture
+		*P_Star_00, *P_Star_01, *P_Star_02, *P_Star_03, *P_Star_04,
+		*P_Star_05, *P_Star_06, *P_Star_07, *P_Star_08, *P_Star_09;
+
+	f32 inexplicably_float;
+	u32 fileNum_maybe;
+	bool hasLoaded;
+	u8 doActuallyDrawMe, isNew, doesHaveBalloon_maybe, mustLoadMyInfo;
+	u8 isWaitingForAnim, activatesHit, doesDrawStarEffects;
+	u8 inited_to_1_E50, unk2[3];
+	u32 _E54;
+
+	// new functions and other shit
+	nw4r::lyt::TextBox *T_clear_00;
+
+	nw4r::lyt::Picture
+		*P_flag_01, *P_flag_02, *P_flag_03, *P_flag_04, *P_flag_05,
+		*P_flag_06, *P_flag_07, *P_flag_08, *P_flag_09, *P_charMario_00,
+		*P_charLuigi_00, *P_charKinoY_00, *P_charKinoB_00, *P_flagMario_00,
+		*P_flagLuigi_00, *P_flagKinoY_00, *P_flagKinoB_00;
+
+	void newLoadInfoForSaveBlock(SaveBlock *block);
+	void setupClearedExitCount(SaveBlock *block);
+	void setupWorldClearFlags(SaveBlock *block);
+	void setIcons(SaveBlock *block);
+};
+
+// lazyass
+class dInfoWindow_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	u8 unk[0x18];
+	bool hasLoaded;
+	u8 unk2[3];
+};
+
+// file selection screen
+class dFileSelect_c : public dBase_c {
+	public:
+		u32 _70;
+		m2d::EmbedLayout_c layout;
+		dStateWrapper_c<dFileSelect_c> state;
+
+		u8 unk[4]; // might be another ptr?
+		dDateFile_c *dateFiles[3];
+		dInfoWindow_c *infoWindow;
+
+		u32 action_isDelete, _260, activeYesNoButton_maybe;
+
+		nw4r::lyt::Pane *rootPane;
+
+		nw4r::lyt::Pane
+			*N_posFile1_00, *N_posFile2_00, *N_posFile3_00,
+			*N_fSB_00, *N_back;
+
+		nw4r::lyt::TextBox
+			*T_info_00, T_info_01, *T_back_00;
+
+		nw4r::lyt::Picture *P_SBBase_00, *P_SBBase_01;
+
+		// actually nw4r::lyt::Window but we don't have that
+		nw4r::lyt::Pane *W_multiButton_00, *W_multiCoin_00;
+
+		float someFloat;
+		// holy fuck
+		u32 animIDPlayedForCopy, currentButton, previousButton, currentCopyOrDeleteSelection, previousCopyOrDeleteSelection,
+		copyAAnimToPlay, copyBAnimToPlay, previousCopyToSelection_maybe, countdownOnStartWait, fileThatIsBeingDeleted,
+		selectedOnTopRow, selectedOnBottomRow, settingsNyb12; // used for which button to return to
+
+		bool layoutLoaded, visible, field_2DA, choiceMade, goBack, isUsingQuickSave;
+
+		// retail functions
+		int returnSelectedFile(); // returns currently selected file (if one is), or selects the first non-new file, or returns 3 if all are new 
+		
+		bool newLoadLayout();
+		void newButtonFunctionality();
+
+		USING_STATES(dFileSelect_c);
+		REF_NINTENDO_STATE(ButtonSelectAnimeEndWait);
+		REF_NINTENDO_STATE(FromCopyOrDeleteBeforeButtonReturn);
+		REF_NINTENDO_STATE(MultiButtonExitAnimeEndWait);
+		REF_NINTENDO_STATE(ButtonHitAnimeEndWait);
+		REF_NINTENDO_STATE(ReturnTitle);
+};
+
+class dSelectPlayer_c : public dBase_c {
+public:
+	dStateWrapper_c<dSelectPlayer_c> state;
+	m2d::EmbedLayout_c layout;
+
+	nw4r::lyt::Picture
+		*P_1_00, *P_2_01, *P_3_01, *P_4_01,
+		*P_2_02, *P_3_02, *P_4_02;
+
+	nw4r::lyt::Pane *N_playerNum_00, *N_playerMulti_00;
+
+	bool layoutLoaded, visible, startShowing, field_26B;
+	int currentChoice, exitBehavior;
+	int onButtonAnimID, offButtonAnimID;
+	int choiceOnBottomRow;
+
+	void newButtonFunctionality(); // new function
+
+	USING_STATES(dSelectPlayer_c);
+	REF_NINTENDO_STATE(ExitAnimeEndWait);
+	REF_NINTENDO_STATE(StartMemberButtonAnime);
+	REF_NINTENDO_STATE(ButtonChangeAnimeEndWait);
+};
+
+// bunch of world map stuff
+class dWorldCamera_c {
+public:
+	u8 unk[0x748]; // HUGE fucking cheat
+
+	static dWorldCamera_c *m_instance;
+};
+
+class dWmMapModel_c {
+public:
+	u8 unk[0xB8];
+	u8 field_B8;
+	u8 field_B9; // direction key pressed???
+	u8 unk2[0x2E];
+	int direction, field_EC;
+
+	u8 unk3[0x70];
+
+	int field_160;
+
+	u8 unk4[0xA93];
+};
+
+// another lazyass class, mostly unknown
+class daWmMap_c {
+public:
+	u8 unk[0x1A0]; // not needed
+	dWmMapModel_c map_models[4];
+	u8 unk2[0x69390];
+
+	u32 handleButtonPresses();
+	bool FUN_80908DA0();
+	void FUN_80904370(int unk);
+
+	void navigatePath();
+	int enterCourse();
+};
+
+
+// todo: look into these and other cutscene shit
+enum CutSequenceName {
+	SMC_DEMO_DEFAULT_CLR = 0,
+	SMC_DEMO_DEFAULT_FAIL,
+	SMC_DEMO_ENEMY_CLR,
+	SMC_DEMO_ENEMY_FAIL,
+	SMC_DEMO_TORIDE_IN,
+	SMC_DEMO_TORIDE_CLR,
+	SMC_DEMO_TORIDE_FAIL,
+	SMC_DEMO_TORIDE_FAIL2,
+	SMC_DEMO_CASTLE_IN,
+	SMC_DEMO_CASTLE_CLR,
+	SMC_DEMO_CASTLE_FAIL,
+	SMC_DEMO_CASTLE_FAIL2,
+	SMC_DEMO_GHOST_IN,
+	SMC_DEMO_GHOST_CLR,
+	SMC_DEMO_GHOST_FAIL,
+	SMC_DEMO_GHOST_FAIL2,
+	SMC_DEMO_CANNON,
+	SMC_DEMO_TRSHIP_APPEAR,
+	SMC_DEMO_DOKAN,
+	SMC_DEMO_DOKAN_WARP,
+	SMC_DEMO_DOKAN_START,
+	SMC_DEMO_W_WALKING_IN,
+	SMC_DEMO_W_WALKING_IN_NORMAL,
+	SMC_DEMO_W_FLYING_IN,
+	SMC_DEMO_W_CANNON_IN,
+	SMC_DEMO_W_CANNON_IN_NORMAL,
+	SMC_DEMO_W1_TORIDE_CLR,
+	SMC_DEMO_W1_CASTLE_CLR,
+	SMC_DEMO_W3_CASTLE_CLR,
+	SMC_DEMO_FADE_TEST,
+	SMC_DEMO_VIEW_WORLD,
+	SMC_DEMO_COURSE_IN,
+	SMC_DEMO_KINOKO_OUT,
+	SMC_DEMO_AIRSHIP_COURSE_IN,
+	SMC_DEMO_AIRSHIP_COURSE_OUT,
+	SMC_DEMO_START_KINOKO_IN,
+	SMC_DEMO_AIRSHIP_GONEXT,
+	SMC_DEMO_W36_CLEAR_NORMAL,
+	SMC_DEMO_NULL,
+	SMC_DEMO_ANTLION,
+	SMC_DEMO_KILLER,
+	SMC_DEMO_START_BATTLE,
+	SMC_DEMO_SWITCH,
+	SMC_DEMO_KOOPACASTLEAPPEAR,
+	SMC_DEMO_KINOPIOSTART,
+	SMC_DEMO_WORLDIN_NOSHIP,
+	SMC_DEMO_WORLDIN_JUMP_NOSHIP,
+	SMC_DEMO_PAUSE_MENU,
+	SMC_DEMO_AIRSHIP_CLEAR,
+	SMC_DEMO_STOCK_MENU,
+	SMC_DEMO_WORLDSELECT_MENU,
+	SMC_DEMO_ANTLION_STAR,
+	SMC_DEMO_GAMESTART,
+	SMC_DEMO_END,
+};
+
+// handles world map sequences
+class dCsSeqMng_c {
+public:
+	u8 dWmActor_c[0x138]; // this class inherits from this
+	mHeapAllocator_c alloc;
+
+	int execute_idx, script_ip, last_script_ip_notified_for, _160;
+	bool _164;
+	u8 _165, _166, _167;
+
+	class ActiveScript {
+	public:
+		CutSequenceName id;
+		int priority;
+		void *parent;
+		dWorldCamera_c *camera;
+	};
+	ActiveScript active_scripts_queue[4];
+	int active_script_id;
+	void *active_script_field3; // actually a dWmDemoActor_c
+	void *active_script_field4; // actually a dWmDemoActor_c
+
+	int _1B4, camera_name_maybe, _1BC;
+	Vec camera_node_pos;
+
+	void *wm_director; // actually a dWmActor_c
+	u8 _1D0, _1D1, _1D2, _1D3;
+
+	static dCsSeqMng_c *instance;
+
+	// functions
+	bool addScriptToQueue(int id, void *param_2, dWorldCamera_c *camera, int priority);
+
+	bool areAnyScriptsQueued();
+	bool FUN_80915600();
+};
+
+int selectRandomButton(bool useHomeButton = false, bool useNunchukButtons = false) {
+    int buttonValue = 0;
+	int maxButtonCount = 9;
+
+	if (useNunchukButtons) maxButtonCount += 2;
+	if (useHomeButton) maxButtonCount += 1;
+
+	int randomBtn = GenerateRandomNumber(maxButtonCount);
+
+    switch (randomBtn) {
+        case 0:
+			buttonValue = WPAD_DOWN;
+            break;
+        case 1:
+            buttonValue = WPAD_UP;
+            break;
+        case 2:
+            buttonValue = WPAD_RIGHT;
+            break;
+        case 3:
+            buttonValue = WPAD_LEFT;
+            break;
+        case 4:
+            buttonValue = WPAD_PLUS;
+            break;
+        case 5:
+            buttonValue = WPAD_TWO;
+            break;
+        case 6:
+            buttonValue = WPAD_ONE;
+            break;
+        case 7:
+            buttonValue = WPAD_B;
+            break;
+        case 8:
+            buttonValue = WPAD_A;
+            break;
+        case 9:
+            buttonValue = WPAD_MINUS;
+            break;
+
+		// nunchuk buttons
+		case 10:
+			buttonValue = WPAD_Z;
+			break;
+		case 11:
+			buttonValue = WPAD_C;
+			break;
+
+		// home button
+		case 12:
+            buttonValue = WPAD_HOME;
+            break;
+    }
+
+	return buttonValue;
+}
+
+// obfuscates text like in minecraft
+const wchar_t *obfuscateText(wchar_t *buffer) {
+	int length = wcslen(buffer);
+	for (int i = 0; i < length; i++) {
+		rollAgain:
+		int code = GenerateRandomNumber(0x30F0);
+
+		// reroll if we get characters that don't exist in the font
+		if (((code < 0x21) || ((code > 0x7E) && (code < 0x3041))))
+			goto rollAgain;
+		buffer[i] = code;
+	}
+
+	return buffer;
+}
+
+class daWMIsland_c : public dActor_c {
+public:
+	u8 _125, _126, _127;
+	mAllocator_c allocator;     // 0x128
+	m3d::mdl_c model;           // 0x144
+	m3d::anmChr_c anmChr;       // 0x184
+	m3d::anmTexSrt_c anmTexSrt; // 0x1BC
+	m3d::anmClr_c anmClr;   	// 0x1E8
+	m3d::anmTexPat_c anmTexPat; // 0x214
+	u32 resFile;                // 0x240
+	u8 unk2[40];                // 0x244
+	int _26C;					// 0x26C
+	u8 unk3[12];				// 0x270
+	u32 islandID;               // 0x27C
+	u8 unk4[84];                // 0x280
+
+	void FUN_808D3F30();
+	void fuckUpIslands();
+};
+
+class dWorldSelectGuide_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;                    // 0x70
+	nw4r::lyt::Pane *rootPane;					  // 0x208
+	nw4r::lyt::TextBox *T_worldNum_00;			  // 0x20C
+	nw4r::lyt::Picture *P_pochi_00, *P_pochi_01;  // 0x210, 0x214
+	nw4r::lyt::Picture *P_pochi_02, *P_pochi_03;  // 0x218, 0x21C
+	nw4r::lyt::Pane *N_wCCGuide_00, *N_title;	  // 0x220, 0x224
+	bool layoutLoaded;							  // 0x228
+	bool visible;								  // 0x229
+	bool showReds;								  // 0x22A
+	bool showTopRed;							  // 0x22B
+	u32 worldNum;								  // 0x22C
+	u32 nextWorldNum;							  // 0x230
+	f32 titleYPos;								  // 0x234
+
+    void updateWorldInfo();
+};
+
+class dWorldSelect_c : public dBase_c {
+public:
+	u32 unk;
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dWorldSelect_c> state;
+
+	daWMIsland_c *islandPtr[9];
+	dWorldSelectGuide_c *guide;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Pane *N_wCC_00;
+
+	nw4r::lyt::Picture *P_bg_00;
+
+	int selectedWorld, nextSelection, relatedToSelection, scrollAgainDelay, islandMoveDelay, delay,
+	_294, currentSelection_maybeNot, islandSelectTimer, islandExpandTimer;
+
+	u8 unk2[0xE];
+
+	bool layoutCreated, visible, cannotRepeatScroll, isHoldingKey, isWorld9Selected, relatedToPaneAlpha_maybe;
+	int relatedToW9Unlock_maybe;
+
+	void finalizeState_SelectExpand();
+	void finalizeState_ExitAnimeEndWait();
+};
+
+// hint movie window crap
+class dModelPlayDate_c : public dBase_c {
+public:
+	dStateWrapper_c<dModelPlayDate_c> state;
+	m2d::EmbedLayout_c layout;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox
+		*T_modelTitle_00, *T_needCoin_01,
+		*T_worldNum_00, *T_worldCourse_00,
+		*T_pictureFont_00;
+
+	nw4r::lyt::Picture
+		*P_model1_00, *P_model1S_00, *P_modelBefore1,
+		*P_starCoin_00, *P_wave_00;
+
+	nw4r::lyt::Pane *N_Coin_00, *W_model1_00;
+
+	bool layoutLoaded, visible, shouldUpdateButton, animationActive;
+	int action, prevAction, movieCost, worldNum, levelNum, _290;
+	u8 movieStatus; // 0 = none (hides button), 1 = unavailable, 2 = not purchased, 3 = unlocked
+
+	u8 unk;
+};
+
+// used by the star coins menu too
+class dModelPlayArrow_c : public dBase_c {
+public:
+	dStateWrapper_c<dModelPlayArrow_c> state;
+	m2d::EmbedLayout_c layout;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Picture *P_arrowL_00, *P_arrowR_00;
+	nw4r::lyt::Pane *N_arrow_00;
+
+	bool layoutLoaded, visible, animationActive;
+	bool leftArrowActive, leftArrowCheck; // checks if left arrow is already active
+	bool rightArrowActive, rightArrowCheck; // checks if right arrow is already active
+
+	u8 _25B; // could be padding?
+	int action; // 0 = none, 1 = wait for an action, 2/3 = hit left/right, 4/5 = hide left/right, 6 = hide both
+};
+
+class dModelPlayBase_c : public dBase_c {
+public:
+	dStateWrapper_c<dModelPlayBase_c> state;
+	m2d::EmbedLayout_c layout;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox *T_totalCoin_00;
+	nw4r::lyt::Picture
+		*N_model_Pos_00, *N_model_Pos_01,
+		*N_modelP_Base_00, *N_scissorArea_00;
+
+	bool layoutLoaded, visible, windowClosed, animationActive;
+	int shouldUpdateCoinCount, action, totalCoinCount;
+	/* actions:
+	 * 0 = none
+	 * 1 = scrolling right
+	 * 2 = scrolling left
+	 * 3 = selecting button
+	 * 4 = exiting menu
+	*/
+};
+
+class HintMovieInfo {
+public:
+	int world;			// 0x00
+	int level;			// 0x04
+	int hintMovieType;	// 0x08
+	int entrance;		// 0x0C
+	int replayDuration;	// 0x10
+	int area;			// 0x14
+	int movieCost;		// 0x18
+	int movieState;		// 0x1C
+};
+
+class dModelPlayManager_c : public dBase_c {
+public:
+	u32 unk;
+	dStateWrapper_c<dModelPlayManager_c> state;
+
+	dModelPlayBase_c  *modelPlayBasePtr;
+	dModelPlayDate_c  *modelPlayDatePtr[10];
+	dModelPlayArrow_c *modelPlayArrowPtr;
+	dYesNoWindow_c    *yesNoWindowPtr;
+	m2d::ResAccLoader_c resAccLoader;
+
+	HintMovieInfo movieInfo[70];
+
+	int action;
+	bool hasSetupMenu, _A7D, _A7E, _A7F, dateLayoutsCreated, _A81;
+	bool shouldUpdateCursor, allW9StagesCleared, allExitsCleared;
+
+	int currentPageID, nextPageID, currentButtonID, nextButtonID;
+	int movieCost_maybe, yesNoSelection, timerForCoinCountdown, timerForCoinPayout, timerForWipeWait;
+	int totalCoinCount;
+
+	u8 unk3[0x10];
+
+	int onExecute();
+	void positionButtons();
+};
+
+// frame on the screen during hint movies
+class dModelPlayGuide_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	nw4r::lyt::Pane *rootPane;
+	bool layoutLoaded;
+};
+
+class dPeachCastleSeqMgrObjPtr : public dBase_c {
+public:
+	// todo (it's not really needed tho)
+};
+
+// takes democontrol of player and shit
+void ActivateModelPlay(void *ptr);
+void DeactivateModelPlay(void *ptr); // ptr might be daPyMng...whateverthefuck
+
+void *PeachCastleSeqMgrObjPtr; // 0x8099E0F8
+
+
+// star coin menu crap
+class dCollectionCoinDate_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dCollectionCoinDate_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Pane *N_coinBarDate_00;
+
+	nw4r::lyt::Picture
+		*P_coinBase1_00, *P_coinBase2_00, *P_coinBase3_00,
+		*P_coin_1_00, *P_coin_2_00, *P_coin_3_00,
+		*P_topFileter;
+
+	nw4r::lyt::TextBox
+		*T_worldNum_00, *T_dash_00,
+		*T_pictureFont_00, *T_corseNum_00;
+
+	nw4r::lyt::Pane *W_fileter_00;
+
+	int worldNum, courseNum, courseConditions;
+	bool layoutLoaded, visible, hidden, shouldUpdate_maybe;
+
+	void loadLevelData(); // replaces 0x80776AC0
+};
+
+class dCollectionCoinBase_c : public dBase_c {
+public:
+	dCollectionCoinDate_c *datePtr[12];
+	m2d::EmbedLayout_c layout;
+
+	nw4r::lyt::Pane *rootPane;
+
+	nw4r::lyt::Pane *N_coinDateAll_00;
+	nw4r::lyt::Pane *N_coinBarPos[12];
+
+	bool layoutLoaded, visible;
+	u8 pad[2];
+
+	void positionCoinBars(); // 0x80776470
+	
+	int onExecute(); // replaces 0x80776390
+	void randomCoinBarPosition();
+};
+
+class dCollectionCoin_c : public dBase_c {
+public:
+	u32 unk;
+	dCollectionCoinBase_c *basePtr[2];
+	dCollectionCoinDate_c *datePtr[24];
+	dModelPlayArrow_c *arrowPtr;
+
+	m2d::EmbedLayout_c layout;
+	m2d::ResAccLoader_c baseLayoutRes;
+	m2d::ResAccLoader_c dateLayoutRes;
+
+	dStateWrapper_c<dCollectionCoin_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+
+	nw4r::lyt::Pane
+		*N_coinbar_01, *N_coinbar_00,
+		*N_Scissor_00, *N_wCC_00, *N_arrowPos;
+
+	nw4r::lyt::TextBox *T_world_00, *T_world_01;
+
+	int coinBarWorldNumber, levelType_maybe, coinFlag; // for coin bar data i think
+
+	u8 unk2[0x6B4];
+
+	int textBoxToUpdateWhenScrolling; // 1 = T_world_00, 2 = T_world_01
+	int arrowAnimToUseWhenScrolling; // 1 = Hit Left, 2 = Hit Right
+	int worldNum, availableWorldCount;
+
+	bool layoutLoaded, visible, scrollDirection; // 0 = prev, 1 = next
+	bool baseLayoutLoaded, dateLayoutLoaded, worldAvailable[9];
+	u8 pad[2];
+
+	void updateWorldNames(); // updates both world name textboxes
+	void updateSpecifiedWorldName(int textBoxNum);
+
+	void toPreviousPage();
+	void toNextPage();
+
+	void executeState_KeyWait(); // replaces 0x807752D0
+
+	USING_STATES(dCollectionCoin_c);
+	REF_NINTENDO_STATE(KeyWait);
+	REF_NINTENDO_STATE(ExitAnimeEndWait);
+
+	// new
+	DECLARE_STATE(MenuJump);
+};
+
+
+// some home menu crap
+namespace dHbm {
+	class Manage_c {
+	public:
+		EGG::Heap *heap;
+		dDvdLoader_c *dvdLoaders[6];
+		void *iconPtr;
+		void *soundPtr;
+		u32 unkPtr;
+		char *filenames[6]; // layout, speakerSe, message, config, icon, sound
+		void *filePtrs[4]; // first four above
+		u8 unkShit[0xC];
+		int languageID;
+
+		u8 unk[0x118];
+		u32 someBitfield;
+		u8 unk2[0x1C];
+
+
+		void newSetRegionLayoutName();
+		
+		static dHbm::Manage_c *instance; // 0x8042A594
+	};
+}
+
+// nope
+/*void disableHomeMenu() {
+	dHbm::Manage_c *hbm = dHbm::Manage_c::instance;
+	hbm->someBitfield |= 0x20;
+}
+
+void enableHomeMenu() {
+	dHbm::Manage_c *hbm = dHbm::Manage_c::instance;
+	hbm->someBitfield &= 0xFFFFFFDF;
+}*/
+
+class dCourseTimeUp_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	mEf::es2 effect;
+	dStateWrapper_c<dCourseTimeUp_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox *T_timeup;
+
+	bool layoutLoaded, visible, exiting;
+	u8 pad;
+
+	int timer; // incremented +1 until it equals maxDisplayTime
+	int maxDisplayTime; // 0x50
+	int overrideDisplayTime; // if != 0, maxDisplayTime is set to this
+};
+
+class dStaffCreditScore_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dStaffCreditScore_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox
+		*T_coin_00,
+		*T_coin_01, *T_coin_02,
+		*T_coin_03, *T_coin_04,
+		*T_highScore_00;
+	nw4r::lyt::Pane
+		*N_mario_00, *N_luigi_00,
+		*N_kinoY_00, *N_kinoB_00,
+		*N_proportionL_00,
+		*N_proportionR_00;
+	
+	bool layoutLoaded, visible;
+	u8 activePlayerFlags_maybe, _27B, _27C, _27D;
+	bool checkingHighScore, settingHighScore, playingPlayerAnim;
+	u8 winAnimationIDs[4], relatedToWLClass;
+	bool returnFromWLClass, _287;
+
+	int coinAmounts[4], lastDisplayedCounts[4], highScore, highScoreCopy;
+	int maxCoinAmt, bestPlayer;
+};
+
+
+// this. layout. sucks.
+class dMiniGameWire_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dMiniGameWire_c> state;
+	nw4r::lyt::Pane *rootPane;
+
+	// position powerups
+	nw4r::lyt::Pane *N_6P_Pos_00[7];
+	nw4r::lyt::Pane *N_6P_Pos[6];
+	nw4r::lyt::Pane *N_5P_Pos[5];
+	nw4r::lyt::Pane *N_4P_Pos[4];
+	nw4r::lyt::Pane *N_3P_Pos[3];
+	nw4r::lyt::Pane *N_2P_Pos[2];
+	nw4r::lyt::Pane *N_1P_Pos[1];
+
+	nw4r::lyt::Pane
+		*N_info_00, *N_result_00, N_result_01,
+		*N_gameWire_00, *N_faceIcon_00;
+
+	// powerups
+	nw4r::lyt::Pane 
+		*N_Skino_00, *N_fire_00,
+		*N_pro_00, *N_ice_00,
+		*N_pen_00, *N_mame_00,
+		*N_star_00;
+
+	nw4r::lyt::TextBox
+		*T_xNum_00, *T_xNum_01,
+		*T_xNum_02, *T_xNum_05,
+		*T_xNum_03, *T_xNum_04,
+		*T_xNum_06, T_infoS_00,
+		*T_info_00;
+
+	nw4r::lyt::Picture
+		*P_Skino_00, *P_fire_00,
+		*P_pro_00, *P_ice_00,
+		*P_pen_00, *P_mame_00,
+		*P_star_00, *P_BG_00,
+		*P_mario_00, *P_luigi_00,
+		*P_kinoB_00, *P_kinoY_00,
+		*P_titleBase_00, *P_dokiMark_01,
+		*P_dokiMarkJr_00;
+	
+	nw4r::lyt::Pane *W_turnS_00, *W_gameWire_00;
+
+	int currentPlayerTurn, behavior_maybe;
+	u8 _358[0x1C];
+	int _374;
+
+	bool layoutLoaded, visible, _37A, _37B, _37C, animationActive,
+	_37E, shouldCloseTitle, shouldCloseDirections,
+	shouldCloseTurnPrompt, shouldCloseResults;
+
+	u8 pad;
+};
+
+
+class dfukidashiInfo_c {
+public:
+	void *vtable;
+	// todo...
+};
+class dfukidashiManager_c : public dBase_c {
+public:
+	m2d::ResAccLoader_c resAccLoader;
+	dfukidashiInfo_c infos[4];
+};
+
+class dTheEnd_c; // sighhh
+
+class dCamera_c : public dBase_c {
+public:
+	EGG::Screen screen;
+	EGG::LookAtCamera camera0;
+	EGG::ProjectOrtho project1;
+	EGG::LookAtCamera camera1;
+	EGG::ProjectOrtho project2;
+	EGG::LookAtCamera camera2;
+	u32 cameraID;
+	Vec cameraPos;
+	Vec targetPos;
+	Vec camUp;
+	Vec centerPos;
+};
+
+float GetLoopPosX(float param_1);
+
+class dScStage_c : public dScene_c {
+	public:
+		u32 runningFrameCount_maybe;
+		sPhase_c chain;
+
+		dQuake_c quake;
+		PauseManager_c pauseManager;
+		dActorMng_c actor_mng;
+		dEnemyMng_c enemy_mng;
+		dBeansKuriboMng_c microGoombaManager;
+		dWaterEntryMng_c waterManager;
+		dEffectExplosionMgr_c effectExplosionManager;
+		dTimerMgr_c timer_mgr;
+		dBlockMgr_c blockMgr;
+		dScoreMng_c score_mgr;
+		dCurtainMng_c curtain_mng;
+		u8 unk[32]; // could be another class, idk
+
+		// and now for pointers
+		dGameDisplay_c *ptrToGameDisplay;
+		dGoalManager_c *ptrToGoalManager;
+		void *ptrToSmallScoreManager;
+		dfukidashiManager_c *ptrToFukidashiManager;
+		dCourseTimeUp_c *ptrToCourseTimeUp;
+		void *ptrToMiniGameCannon;
+		dMiniGameWire_c *ptrToMiniGameWire;
+		dModelPlayManager_c *ptrToModelPlayManager;
+		dMessageWindow_c *ptrToMessageWindow;
+		dModelPlayGuide_c *ptrToModelPlayGuide;
+		dStaffCreditScore_c *ptrToStaffCreditScore;
+		dTheEnd_c *ptrToTheEnd;
+		dYesNoWindow_c *ptrToYesNoWindow;
+
+		u32 unk2;
+		u8 curWorld, curLevel, curArea, curZone, curLayer, curEntrance, field_1212, field_1213;
+		u32 uselessPMTFIndex;
+
+
+		// functions
+		void setupNewLevel();
+		void loadNewStageActors();
+		void unloadNewStageActors();
+
+		static dCamera_c *getCamera(int id);
+
+		static dScStage_c *instance; // 0x8042A4A8
+		static u32 exeFrame;
+};
+
+class dTheEnd_c : public dBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dTheEnd_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+
+	bool layoutLoaded, willShow, willHide, animationPlaying;
+};
+inline dTheEnd_c *GetTheEnd() {
+	dTheEnd_c *theEnd = dScStage_c::instance->ptrToTheEnd;
+	return theEnd;
+}
+
+
+// some wipe/fader stuff
+class mFaderBase_c {
+public:
+	void *vtable; // 0x80329E20
+	u32 status; // 0 = opaque, 1 = hidden, 2 = fading in, 3 = fading out
+	u32 flag;
+	u8 pad;
+	u16 frameCount; // set to 0x14
+	u16 frame;
+	u8 pad2[2];
+	GXColor color;
+};
+
+class mColorFader_c : public mFaderBase_c {
+public:
+	bool isWideScreen;
+	u8 padMaybe[3];
+};
+
+class mWipeFader_c : public mFaderBase_c {
+public:
+	float mtx[3][4];
+	u8 progress;
+	u8 pad[3];
+	float aspectRatioFactor;
+	void *texture;
+	int textureWidth, textureHeight;
+};
+
+
+// wipes
+class dWipeCircle_c : public mFaderBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Pane *W_circle_00;
+	Vec2 focus_point_maybe;
+	int action;
+	bool layoutLoaded, slowerFade, _1C2;
+	u8 pad;
+
+	static dWipeCircle_c *instance; // 0x80429F10
+};
+
+class dWipeDokan_c : public mFaderBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Picture *P_baseBlack_00;
+	int action;
+	bool layoutLoaded;
+	u8 pad[3];
+
+	static dWipeDokan_c *instance; // 0x80429F18
+};
+
+class dWipeKuppa_c : public mFaderBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Pane *W_kuppa_00;
+	int action;
+	bool layoutLoaded;
+	u8 pad[3];
+
+	static dWipeKuppa_c *instance; // 0x80429F20
+};
+
+class dWipeMario_c : public mFaderBase_c {
+public:
+	m2d::EmbedLayout_c layout;
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Pane *W_mario_00;
+	int action;
+	bool layoutLoaded;
+	u8 pad[3];
+
+	static dWipeMario_c *instance; // 0x80429F28
+};
+
+class dFader_c {
+public:
+	bool createFader(EGG::Heap *heap);
+	void draw();
+
+	void calc();
+
+	bool setFader(int fadeID);
+
+	void startFadeIn(short frameCount = 30);
+	void startFadeOut(short frameCount = 30);
+};
+
+
+class dWarningOther_c {
+public:
+	void *vtable;
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dWarningOther_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox *T_player;
+	nw4r::lyt::Pane *W_extensionCla;
+
+	bool layoutLoaded, visible;
+	bool animationActive, shouldCloseWindow;
+	int playerID;
+};
+
+class dWarningNunchuk_c {
+public:
+	void *vtable;
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dWarningNunchuk_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox *T_player;
+	nw4r::lyt::Pane *W_extensionCN;
+
+	bool layoutLoaded, visible;
+	bool animationActive, shouldCloseWindow;
+	int playerID;
+};
+
+class dWarningYoKo_c {
+public:
+	void *vtable;
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dWarningYoKo_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox *T_player;
+	nw4r::lyt::Pane *W_extensionYoko;
+
+	bool layoutLoaded, visible;
+	bool animationActive, shouldCloseWindow;
+	int playerID;
+};
+
+class dWarningBattery_c {
+public:
+	void *vtable;
+	u32 _04;
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dWarningBattery_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::Pane
+		*N_batt_00, *N_batt_01, *N_batt_02, *N_batt_03,
+		*Null_battPos1P, *Null_battPos2P, *Null_battPos3P, *Null_battPos4P,
+		*N_batt;
+	nw4r::lyt::Picture
+		*P_batB_03, *P_batB_02, *P_batB_01, *P_batB_00, *P_bat_00,
+		*P_batB_13, *P_batB_12, *P_batB_11, *P_batB_10, *P_bat_01,
+		*P_batB_23, *P_batB_22, *P_batB_21, *P_batB_20, *P_bat_02,
+		*P_batB_33, *P_batB_32, *P_batB_31, *P_batB_30, *P_bat_03;
+
+	Vec batteryPositions[4];
+	bool layoutLoaded, visible, batteryActive[4], shouldDisplay;
+	u8 _28B[5];
+
+	int displayTimer;
+	void *someRemoteThing[4];
+};
+
+class dWarningErrorInfo_c {
+public:
+	void *vtable;
+	u32 _04;
+	m2d::EmbedLayout_c layout;
+	dStateWrapper_c<dWarningErrorInfo_c> state;
+
+	nw4r::lyt::Pane *rootPane;
+	nw4r::lyt::TextBox
+		*T_infoS_00, *T_info_00, *T_player_00,
+		*T_yes_00, *T_yes_01, *T_no_00, *T_no_01,
+		*T_center_00, *T_center_01;
+	nw4r::lyt::Pane * N_playerButton;
+	nw4r::lyt::Picture
+		*P_yesBase_00, *P_noBase_00,
+		*P_centerBase_00;
+
+	int valueForCursorUpd, playerID, timeUntilExit;
+	int errorType; // 3 = bad file
+	int currentSelection, previousSelection;
+
+	bool layoutLoaded, visible, shouldCloseWindow_maybe;
+	bool onlyOneButton; 
+};
+
+class dWarningManager_c : public dBase_c {
+public:
+	u32 _70;
+
+	dWarningOther_c		warningOther;
+	dWarningNunchuk_c	warningNunchuk;
+	dWarningYoKo_c		warningYoKo;
+	dWarningBattery_c	warningBattery;
+	dWarningErrorInfo_c	warningErrorInfo;
+
+	dStateWrapper_c<dWarningManager_c> state;
+
+	u32 _B48, _B4C, _B50;
+	int controllerType[4]; // 0 = yoko, 1 = nunchuk, 2 = classic controller(?)
+	int playerForExtensionWarn;
+	int screenBeingDrawn; // 0 = bad ext, 1 = nunchuk ext, 2 = wiimote ext, 3 = battery, 4 = error info, 5 = none
+
+	u32 _B6C, _B70, _B74, _B78;
+	// if these == 4, then error warning cancels
+	u32 maybe_not_array, _B80, _B84, _B88;
+
+	bool isExtensionActive, isBatteryActive, isErrorActive, isSaveErrorActive, _B90;
+	u8 _B91[3];
+};
+
+
+/*class dSmallScore_c {
+public:
+
+};
+
+
+// color1 is top vtx, and color 2 is bottom
+GXColor MarioPointColor1, MarioPointColor2;
+GXColor LuigiPointColor1, LuigiPointColor2;
+GXColor KinoBPointColor1, KinoBPointColor2;
+GXColor KinoYPointColor1, KinoYPointColor2;
+GXColor DefaultPointColor1, DefaultPointColor2;
+
+void changeSmallScoreColor(nw4r::lyt::TextBox *target, int charID); // 0x800B4780
+
+class dSmallScoreManager_c : public dBase_c {
+public:
+
+
+	static dSmallScoreManager_c *instance; // 0x8042A5B0
+};
+
+void DisplayScoreAddPopup(Vec *pos, u32 messageID, u32 playerID, bool unk);
+void DisplayRedCoinPopup(Vec *pos, u32 playerID);
+void DisplayToadBalloonPopup(Vec *pos, u32 messageID, u32 playerID);
+
+
+class dStageTimer_c {
+public:
+	void *vtable;
+	u32 preciseTime; // whatever time value << 12
+	short time;
+	bool isAmbush, timeLessThan100, isPaused;
+	u8 pad[3];
+};*/
+
+// base class for throwable objects
+class daBullet_c : public dActorState_c {
+public:
+	mHeapAllocator_c allocator;
+	u32 _3EC, some_direction, _3F4;
+	S16Vec deadroll_delta;
+	u8 _3FE, _3FF;
+};
+
+class daHammer_c : public daBullet_c {
+public:
+	/* Settings:
+	* nyb 7-8: 
+	* nyb  12: related to Y angle
+	*/
+
+	u8 sMdl[12]; // m3d::smdl_c
+	Vec addedToSize; // 0.7 / nybble 7-8 value
+	int sizeCount; // nybble 7-8 value
+
+	u32 _420, _424;
+	u16 _428;
+	u8 _42A, _42B;
+
+	ActivePhysics::Info collisionInfo;
+	u32 someActorID; // might be owner?
+	u8 _454, _455, _456, _457;
+
+	// new
+	int playerID; // 0x100 is added to this
+
+
+	daHammer_c(); // 0x807FCBA0
+
+	virtual int onDraw();						// 0x807FCE60
+	virtual ~daHammer_c();						// 0x807FD470
+	virtual void loadModel();					// 0x807FCDD0
+	virtual void setupPhysics();				// 0x807FCC30
+	virtual void setupSpitOutPhysics(int unk);	// 0x807FD020
+	virtual void deleteIfOffSceen_maybe();		// 0x807FD420 - REPLACED
+	virtual void playHammersCollideSound();		// 0x807FD3D0
+	virtual void addAngleAndPos_maybe();		// 0x807FD3B0
+	virtual void playSound();					// 0x807FD350
+
+	u32 isHammerOffScreen(); // 0x807FCFE0
+};
+
+#endif

@@ -1,0 +1,8 @@
+---
+source_files: [../src/config.cpp]
+hooks:
+  - name: debugConfig
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8015D850
+    target_func: 'dConfigManager_c::doConfigLoad(void)'

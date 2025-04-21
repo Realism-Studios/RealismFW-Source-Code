@@ -1,0 +1,33 @@
+---
+# The flowers would like to have a talk with you.
+source_files: [../src/flower.s]
+hooks:
+  - name: FlowerHack1
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80077FC4
+    target_func: 'FlowerCheck'
+
+  - name: FlowerHack2
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x808762D8
+    target_func: 'FlowerBuild1'
+
+  - name: FlowerHack3
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80876364
+    target_func: 'FlowerBuild2'
+
+  - name: FlowerHack4
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x808763C8
+    target_func: 'FlowerBuild3'
+
+  - name: FlowerHack5
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80876568
+    target_func: 'FlowerBuild4'

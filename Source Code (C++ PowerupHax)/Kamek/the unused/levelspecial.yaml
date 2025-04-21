@@ -1,0 +1,19 @@
+---
+source_files: [../src/levelspecial.cpp]
+hooks:
+  - name: ResetAfterLevel
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x809259E0
+    target_func: 'ResetAfterLevel(bool)'
+
+  - name: MarioStateChanger
+    type: add_func_pointer
+    src_addr_pal: 0x803259FC
+    target_func: 'MarioStateChanger(void *, dStateBase_c *, unsigned int)'
+
+  - name: FuckinBubbles
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80926200
+    target_func: 'FuckinBubbles(void)'

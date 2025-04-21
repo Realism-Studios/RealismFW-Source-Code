@@ -1,0 +1,32 @@
+---
+source_files: [../src/courseselectguide.cpp]
+hooks:
+  - name: HandleLevelDisplay
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x800125C0
+    target_func: 'dCourseSelectGuide_c::handleLevelData(LevelNumber, int)'
+
+  # remove position adjustments for the life counters
+  - name: LifeCounterPosFix
+    type: nop_insn
+    area_pal: [0x8001074C, 0x80010754]
+
+  # stop layout from being clipped off at the letterbox lines
+  - name: LetterboxScissorKill
+    type: nop_insn
+    area_pal: 0x80010588
+
+  # header replaces the guides, which are visible during the map view
+  # we don't want to see the header though, so disable all anim calls for it
+  - {name: HeaderAnimNop1, type: nop_insn, area_pal: 0x80012394}
+  - {name: HeaderAnimNop2, type: nop_insn, area_pal: 0x800123E8}
+  - {name: HeaderAnimNop3, type: nop_insn, area_pal: 0x800124D4}
+  - {name: HeaderAnimNop4, type: nop_insn, area_pal: 0x800124E4}
+
+  # this one's weird so we have to kill it differently
+  - name: HeaderAnimNop3
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80012460
+    target_func: 'ReturnNone'

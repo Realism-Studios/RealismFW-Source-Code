@@ -1,0 +1,13 @@
+-- All Replaced Sprites--
+22 : DUMMY_ACTOR : EN_MAME_KURIBO
+273: DUMMY ACTOR : MANTA_MGR2
+
+
+
+-- All Replaced Profiles --
+None!
+
+
+
+-- World Map Processes Free for Use: --
+None!

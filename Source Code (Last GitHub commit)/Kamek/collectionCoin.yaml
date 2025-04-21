@@ -1,0 +1,44 @@
+---
+source_files: [../src/collectionCoin.cpp]
+hooks:
+  - name: CCDate_LoadLevelInfo
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80776AC0
+    target_func: 'dCollectionCoinDate_c::loadLevelData(void)'
+
+# Base
+  - name: CCBase_OnExecute
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80776390
+    target_func: 'dCollectionCoinBase_c::onExecute(void)'
+
+  - name: CCBase_CoinBarPosition
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80776470
+    target_func: 'dCollectionCoinBase_c::randomCoinBarPosition(void)'
+
+# Main
+  - name: CollectionCoin_UpdateWorldName
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80774B60
+    target_func: 'dCollectionCoin_c::updateWorldNames(void)'
+  
+  - name: CollectionCoin_UpdateWorldName2
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80774C10
+    target_func: 'dCollectionCoin_c::updateSpecifiedWorldName(int)'
+  
+  - name: CollectionCoin_ButtonFunctionality
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x807752D0
+    target_func: 'dCollectionCoin_c::executeState_KeyWait(void)'
+
+  
+
+  

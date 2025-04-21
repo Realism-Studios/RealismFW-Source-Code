@@ -1,0 +1,49 @@
+# This is the virus, the virus of life
+---
+source_files:
+  - ../src/koopatlas/fixes.S
+  - ../src/koopatlas/koopatlasCore.cpp
+  - ../src/koopatlas/kpPlayer.cpp
+  - ../src/koopatlas/kpMapHud.cpp
+  - ../src/koopatlas/kpCamera.cpp
+  - ../src/koopatlas/kpWorldMap.cpp
+  - ../src/koopatlas/kpMapData.cpp
+  - ../src/koopatlas/kpPathManager.cpp
+  #- ../src/koopatlas/shop.cpp
+  #- ../src/koopatlas/starcoin.cpp
+  - ../src/koopatlas/kpMusic.cpp
+  - ../src/koopatlas/kpScene.S
+  - ../src/koopatlas/texmapcolouriser.cpp
+
+hooks:
+# fix the STOCK_ITEM references
+  - name: StockItemFix
+    type: patch
+    addr_pal: 0x80101220
+    data: '4E800020'
+
+# try to fix effects?
+#  - name: WMEffectFixTry
+#    type: patch
+#    addr_pal: 0x80124DCC
+#    data: '2800000D'
+#  - name: WMEffectDebug
+#    type: branch_insn
+#    src_addr_pal: 0x802863AC #Effect::Calc
+#    src_addr_pal: 0x8016CB10 #mEf::effect_c::spawnWithName or something
+#    src_addr_pal: 0x802858B0 #Effect::Draw
+#    src_addr_pal: 0x8016C9CC #DealWithPuttingEffectsOnTheScreen-succeeds with extra RenderEffects
+#    src_addr_pal: 0x80286A70
+#    branch_type: b
+#    target_func: 'UniversalFunctionLog'
+
+  - name: ClearLastPowerupStoreTypeAfterGameOver
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x809216EC
+    target_func: 'ClearLastPowerupStoreTypeAfterGameOver'
+
+  - name: StarMarioOnMaps
+    type: patch
+    addr_pal: 0x800D52F0
+    data: '41820010'

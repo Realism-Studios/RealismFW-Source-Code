@@ -1,0 +1,31 @@
+---
+source_files: [../src/pauseMenuHax.cpp, ../src/pauseMenuHax.S]
+hooks:
+  - name: extendClassSize
+    type: patch
+    addr_pal: 0x8015A488
+    data: '3860029C' # 0x298 + 0x4
+  
+  - name: onWindowCreation
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8015AC60
+    target_func: 'Pausewindow_c::onWindowCreation(void)'
+
+  - name: onWindowOpen
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8015AEC0
+    target_func: 'Pausewindow_c::onWindowOpen(void)'
+
+  - name: onWindowClose
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8015B280
+    target_func: 'Pausewindow_c::onWindowClose(void)'
+  
+  - name: fixPauseCounterBug
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x800D10A4
+    target_func: 'decrementCounter'

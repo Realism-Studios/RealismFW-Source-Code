@@ -1,0 +1,6 @@
+---
+#Replaces nothing because Kirblue was bitching about it
+
+
+source_files: [../src/cbf.cpp]
+hooks: []

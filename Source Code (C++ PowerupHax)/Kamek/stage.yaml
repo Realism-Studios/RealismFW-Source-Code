@@ -1,0 +1,23 @@
+# stage scene hacks
+---
+source_files: [../src/stage.cpp]
+hooks:
+# load new actors and stuff
+  - name: LoadNewStageActors
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x80925E50
+    target_func: 'dScStage_c::loadNewStageActors(void)'
+
+  - name: UnloadNewStageActors
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x809259C4
+    target_func: 'dScStage_c::unloadNewStageActors(void)'
+
+# others
+  - name: NewStageDrawFunc
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80923D80
+    target_func: 'StageDrawFunc(void)'

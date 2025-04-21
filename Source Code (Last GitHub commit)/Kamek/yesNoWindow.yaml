@@ -1,0 +1,8 @@
+---
+source_files: [../src/yesNoWindow.cpp]
+hooks:
+  - name: NewLoadThings
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80769130
+    target_func: 'dYesNoWindow_c::newLoadThings(void)'

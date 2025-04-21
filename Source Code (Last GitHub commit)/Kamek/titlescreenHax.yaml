@@ -1,0 +1,30 @@
+---
+source_files: [../src/titlescreenHax.cpp]
+hooks:
+  - name: ExpandClassSize # for dEventOpeningTitle_c
+    type: patch
+    addr_pal: 0x80781988
+    data: '3860027C' # 0x278 + 0x4
+
+  - name: ChangeExitWipe
+    type: patch
+    addr_pal: 0x8078238C
+    data: '38c00002' # Bowser
+  
+  - name: TitlescreenNewOnCreate
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80781C50
+    target_func: 'dEventOpeningTitle_c::newOnCreate(void)'
+
+  - name: NewButtonFunctionality
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80782240
+    target_func: 'dEventOpeningTitle_c::buttonFunctionality(void)'
+  
+  - name: ChooseTitlescreenStage
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x8010191C
+    target_func: 'ChooseTitlescreenStage(void)'

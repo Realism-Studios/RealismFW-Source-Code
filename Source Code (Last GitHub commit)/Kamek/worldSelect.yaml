@@ -1,0 +1,25 @@
+---
+source_files: [../src/worldSelect.cpp]
+hooks:
+  - name: FuckUpIslands
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x808D376C
+    target_func: 'daWMIsland_c::fuckUpIslands(void)'
+  
+  - name: WorldSelectGuide_UpdateWorldInfo
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8092B7B0
+    target_func: 'dWorldSelectGuide_c::updateWorldInfo(void)'
+  
+  - name: WorldSelect_IncreaseExitWaitTime
+    type: patch
+    addr_pal: 0x8092A2E0
+    data: '388000B4'
+
+  - name: WorldSelect_HideNewCursor
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8092A200
+    target_func: 'dWorldSelect_c::finalizeState_ExitAnimeEndWait(void)'

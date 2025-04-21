@@ -1,0 +1,7 @@
+---
+source_files: [../src/boomeranghax.cpp]
+hooks:
+  - name: GABON_ROCK_replace
+    type: add_func_pointer
+    src_addr_pal: 0x8095C740
+    target_func: 'daGabonRock_c::getsettings(void)'

@@ -1,0 +1,52 @@
+---
+source_files: [../src/datefile.cpp, ../src/fileselect.cpp]
+hooks:
+# ScGameSetup
+  # todo: remove fade between file select and select player
+
+# DateFile
+  - name: DateFile_ExpandClassSize
+    type: patch
+    addr_pal: 0x8077CAE8
+    data: '38600EA0' # 0xE54 + 0x4C
+
+  - name: DateFile_NewLoadInfo
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8077D9A0
+    target_func: 'dDateFile_c::newLoadInfoForSaveBlock(SaveBlock *)'
+
+  # Uncomment this to completely remove the star sparkles
+  # - name: DateFile_RemoveStarEffects
+  #   type: nop_insn
+  #   area_pal: 0x8077D148
+
+  - name: DateFile_RemoveStarEffectPos
+    type: nop_insn
+    area_pal: 0x8077D2D0
+
+# FileSelect
+  - name: FileSelBase_RemoveRefsForBMG
+    type: patch
+    addr_pal: 0x80782F38
+    data: '38E00005' # Removes BMG writing to: T_copy_00, T_delete_01, T_multiS_00, T_multi_00, T_multiS_01, T_multi_01
+
+  # - name: FileSelection_NewLoadLayout
+  #   type: branch_insn
+  #   branch_type: b
+  #   src_addr_pal: 0x80782E80
+  #   target_func: 'dFileSelect_c::newLoadLayout(bool)'
+
+  # - name: FileSelection_NewButtonFunctionality
+  #   type: branch_insn
+  #   branch_type: b
+  #   src_addr_pal: 0x80783C10
+  #   target_func: 'dFileSelect_c::newButtonFunctionality(void)'
+    
+
+# SelectPlayer
+  - name: FileSelPlayer_NewButtonFunctionality
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x807AC7A0
+    target_func: 'dSelectPlayer_c::newButtonFunctionality(void)'

@@ -1,0 +1,70 @@
+---
+source_files: [../src/courseSelectMenu.cpp]
+hooks:
+  - name: CSM_extendClassSize
+    type: patch
+    addr_pal: 0x8077A758
+    data: '3860027C' # 0x278 + 0x4
+  
+  - name: CSM_onCreate
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8077AA10
+    target_func: 'dCourseSelectMenu_c::onCreate(void)'
+
+  - name: CSM_onExecute
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8077ACA0
+    target_func: 'dCourseSelectMenu_c::onExecute(void)'
+
+  - name: CSM_onDraw
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8077AD20
+    target_func: 'dCourseSelectMenu_c::onDraw(void)'
+
+  - name: CSM_loadLayout
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8077AB70
+    target_func: 'dCourseSelectMenu_c::loadLayout(void)'
+
+  - name: CSM_setupSelectCursor
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8077AD70
+    target_func: 'dCourseSelectMenu_c::setupSelectCursor(void)'
+  
+  - name: CSM_beginState_InitWait
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8077ADB0
+    target_func: 'dCourseSelectMenu_c::beginState_InitWait(void)'
+  
+  - name: CSM_executeState_PauseDisp
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8077B010
+    target_func: 'dCourseSelectMenu_c::executeState_PauseDisp(void)'
+  
+  # fix anim IDs due to new button
+  - name: CSM_fixAnimReset
+    type: patch
+    addr_pal: 0x8077ADF8
+    data: '2C1F0006' # reset an additional anim ID
+
+  - name: CSM_fixOffAnims
+    type: patch
+    addr_pal: 0x8077AF58
+    data: '38840011' # first offButon anim is ID 17 (0x11)
+
+  - name: CSM_fixHitAnims
+    type: patch
+    addr_pal: 0x8077B1AC
+    data: '3884000C' # first hitButton anim is ID 12 (0xC)
+
+  - name: CSM_fixCloseAnim
+    type: patch
+    addr_pal: 0x8077B264
+    data: '38800016' # 22

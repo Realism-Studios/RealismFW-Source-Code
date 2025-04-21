@@ -1,0 +1,9 @@
+---
+source_files: [../src/sceneRedirect.cpp]
+hooks:
+# World Map Scene redirects
+  - name: GAME_SETUP_SceneRedirect
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x809191EC
+    target_func: 'WorldMapRedirect'

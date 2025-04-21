@@ -1,0 +1,104 @@
+---
+# 808DFE50 manages world 1,2,3,4,5, and 7 ambushes. better to remove them there than to blr their constructor.
+# 808E1750 is most other hardcoded map actors
+# 80904120 handles button press cutscene shit
+# 80904440 determines what animation plays when entering a level
+
+source_files: [../src/worldMap.cpp, ../src/worldmaphax.S, ../src/worldmapManager.cpp, ../src/worldmapScripts.cpp, ../src/worldmapScripts.S]
+hooks:
+# Cannon Destinations
+  - {name: W1CannonDest, type: patch, addr_pal: 0x802f4cf0, data: '00000002'} # world num - 1
+  - {name: W2CannonDest, type: patch, addr_pal: 0x802f4cf4, data: '00000000'}
+  - {name: W3CannonDest, type: patch, addr_pal: 0x802f4cf8, data: '00000005'}
+  - {name: W4CannonDest, type: patch, addr_pal: 0x802f4cfc, data: '00000005'}
+  - {name: W5CannonDest, type: patch, addr_pal: 0x802f4d00, data: '00000007'}
+  - {name: W6CannonDest, type: patch, addr_pal: 0x802f4d04, data: '00000008'}
+  # yes, this is data from the vanilla game, world 7, 8, 9 and 10(?) all have the warp cannon value set to A, which would be world 11/B
+  # obviously this map doesn't exist and isn't even supported by the save file, but feel free to change what world it goes to
+  - {name: W7CannonDest, type: patch, addr_pal: 0x802f4d08, data: '00000000'}
+  - {name: W8CannonDest, type: patch, addr_pal: 0x802f4d0C, data: '00000000'}
+  - {name: W9CannonDest, type: patch, addr_pal: 0x802f4d10, data: '00000000'}
+  - {name: WACannonDest, type: patch, addr_pal: 0x802f4d14, data: '0000000E'}
+
+# Level hardcode removals
+  - {name: disableLevelRegularCondSetting, type: nop_insn, area_pal: 0x80928448}
+  - {name: disableLevelNormalCondSetting, type: nop_insn, area_pal: 0x809286bc}
+  - {name: disableLevelSecretCondSetting, type: nop_insn, area_pal: 0x809286e4}
+
+# Ambush Removals
+  - {name: removeW1Goomba, type: nop_insn, area_pal: [0x808dfe70, 0x808dfe74]}
+  - {name: removeW2Antlion, type: nop_insn, area_pal: 0x808e0130}
+  # - {name: removeW3Bros, type: nop_insn, area_pal: [0x808dfe88, 0x808dfe8c]}
+  # - {name: removeW4Fish, type: nop_insn, area_pal: [0x808dfe78, 0x808dfe7c]}
+  # - {name: removeW5Pirahna, type: nop_insn, area_pal: [0x808dfe80, 0x808dfe84]}
+  - {name: removeW6BulletBill, type: patch, addr_pal: 0x808d5210, data: '4E800020'}
+  - {name: removeW7Lakitu, type: nop_insn, area_pal: [0x808dfe90, 0x808dfe94]}
+  - {name: removeW8Bubble, type: patch, addr_pal: 0x808ca570, data: '4E800020'}
+
+# Effect Removals
+  - {name: removeW3Snow, type: nop_insn, area_pal: [0x80321978, 0x80321988]}
+  - {name: removeW5PoisonBubble, type: nop_insn, area_pal: 0x803219cc}
+  - {name: removeW8LavaEffects, type: nop_insn, area_pal: [0x80321998, 0x803219a8]}
+  # - {name: removeBowserCastleFire, type: nop_insn, area_pal: 0x80321aa4}
+  - {name: removeW9Comets, type: nop_insn, area_pal: 0x803219e0}
+
+# Koopaling/Airship Removal
+  # - {name: removeAirship, type: patch, addr_pal: 0x808dbee0, data: '4E800020'}
+  # - {name: removeKoopalings, type: patch, addr_pal: 0x808f7100, data: '4E800020'} #needs to be used with previous patches, or else you get an invalid read
+
+# Misc Removals
+  # - {name: removeItemMenu, type: nop_insn, area_pal: 0x80904298}
+  # - {name: removeWorldSelect, type: nop_insn, area_pal: 0x809042e4}
+  # - {name: removeMapview, type: nop_insn, area_pal: 0x809041e8}
+  # - {name: removeTowerFlag, type: nop_insn, area_pal: 0x808f2c68}
+  # - {name: removeCastleFlag, type: nop_insn, area_pal: 0x808cd044}
+  # - {name: removeWMBoo, type: nop_insn, area_pal: 0x808d1494}
+  - {name: removeOpeningSequenceW1, type: patch, addr_pal: 0x8031dc9c, data: '802f4118'}
+  - {name: removeW2Palm, type: nop_insn, area_pal: [0x808e1c70,0x808e1c74]}
+  - {name: removeW4Palm, type: nop_insn, area_pal: [0x808e1c78, 0x808e1c7c]}
+  - {name: removeW5Wiggler, type: nop_insn, area_pal: 0x808e1d38}
+  - {name: removeW5Vine, type: nop_insn, area_pal: 0x808e1d88}
+  - {name: removeW6Cloud, type: nop_insn, area_pal: 0x808e1da4}
+  - {name: removeCloudsW7, type: nop_insn, area_pal: [0x808e1cf4, 0x808e1d10]}
+  - {name: removeIvyW7, type: nop_insn, area_pal: 0x808e1cd0}
+  # - {name: removeBowserCastleFlag, type: nop_insn, area_pal: 0x808ff348}
+
+# important stuff, don't mess with unless you know what you're doing
+  - name: wmLoop
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x8092c284
+    target_func: 'saveForWM'
+
+  - name: loadMoreFiles
+    type: patch
+    addr_pal: 0x80927910
+    data: '281b0010' #281b0010 + new models
+
+  - name: loadMoreFiles2
+    type: patch
+    addr_pal: 0x80926c20
+    data: '281c0010' #281b0010 + new models
+
+  - name: useCustomScripts
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x801016C8
+    target_func: 'useCustomScripts'
+
+  - name: expandMapHeap
+    type: patch
+    addr_pal: 0x808df15c
+    data: '3C800005'
+
+  - name: fixShadowScales
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x809032c0
+    target_func: 'newShadowScales'
+
+  # - name: WorldMapButtonFunctionalityHack
+  #   type: branch_insn
+  #   branch_type: b
+  #   src_addr_pal: 0x80904120
+  #   target_func: 'daWmMap_c::handleButtonPresses(void)'

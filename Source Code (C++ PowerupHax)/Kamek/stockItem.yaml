@@ -1,0 +1,85 @@
+---
+source_files: [../src/stockItem.S, ../src/stockItem.cpp]
+hooks:
+# STOCK ITEM
+  # Original size: 0x8E0
+  # New size: 0x9A8
+  # New fields:
+  # - 0x8E0 : Item Pointers
+  # - 0x908 : Item Counts
+  # - 0x930 : Button Bases
+  # - 0x958 : Icon Panes
+  # - 0x980 : Icon Pictures
+
+  # add 0x14 for each new powerup
+  - name: StockItem_ExpandClassSize
+    type: patch
+    addr_pal: 0x807AF378
+    data: '386009A8' # 0x8E0 + 0xC8
+
+  - {name: NewOnCreate, type: branch_insn, branch_type: b, src_addr_pal: 0x807AF730, target_func: 'dStockItem_c::onCreate(void)'}
+  - {name: NewLoadLayout, type: branch_insn, branch_type: b, src_addr_pal: 0x807AF8D0, target_func: 'dStockItem_c::loadLayout(void)'}
+
+  - {name: NewSetScales, type: branch_insn, branch_type: b, src_addr_pal: 0x807AFBC0, target_func: 'dStockItem_c::setScalesOfSomeThings(void)'}
+  - {name: UpdateSelectCursor, type: branch_insn, branch_type: b, src_addr_pal: 0x807B0EC4, target_func: 'dStockItem_c::updateCursor(void)'}
+  - {name: NewUpdateSelectOrder, type: branch_insn, branch_type: b, src_addr_pal: 0x807B08E0, target_func: 'dStockItem_c::updateSelectOrder(int *)'}
+
+  - {name: ResetNewButtonAnims, type: branch_insn, branch_type: b, src_addr_pal: 0x807B0AF0, target_func: 'dStockItem_c::initializeState_WindowOpenAnimeEndWait(void)'}
+  - {name: PickNewPowerupsForInitialChoice, type: branch_insn, branch_type: b, src_addr_pal: 0x807B0BE0, target_func: 'dStockItem_c::executeState_WindowOpenAnimeEndWait(void)'}
+  - {name: ButtonChangeAnimations, type: branch_insn, branch_type: b, src_addr_pal: 0x807B0D90, target_func: 'dStockItem_c::initializeState_ButtonChangeAnimeEndWait(void)'}
+  - {name: ChooseHitButtonAnim, type: branch_insn, branch_type: b, src_addr_pal: 0x807B14D0, target_func: 'dStockItem_c::initializeState_HitAnimeEndWait(void)'}
+  - {name: CloseWindow, type: branch_insn, branch_type: b, src_addr_pal: 0x807B13C0, target_func: 'dStockItem_c::finalizeState_WindowCloseAnimeEndWait(void)'}
+
+  - {name: NewPowerupSounds, type: branch_insn, branch_type: b, src_addr_pal: 0x807B0814, target_func: 'NewPowerupSounds'}
+  - {name: AddPowerupFinalValue, type: branch_insn, branch_type: bl, src_addr_pal: 0x807B01F0, target_func: 'AddPowerupFinalValue'}
+  - {name: AddItemFinalValue, type: branch_insn, branch_type: bl, src_addr_pal: 0x807B06E0, target_func: 'AddItemFinalValue'}
+  - {name: CalcNewPowerupResult, type: branch_insn, branch_type: b, src_addr_pal: 0x800FC9B4, target_func: 'CalcNewPowerupResult'}
+  - {name: FixCalcPowerupResultForMushroom, type: branch_insn, branch_type: b, src_addr_pal: 0x800FC9E8, target_func: 'FixCalcPowerupResultForMushroom'}
+
+
+  - {name: FixDummyAnimID1, type: patch, addr_pal: 0x807AFB08, data: '2C0400FF'}
+  - {name: FixDummyAnimID2, type: patch, addr_pal: 0x807AFB20, data: '380000FF'}
+  - {name: FixDummyAnimID3, type: patch, addr_pal: 0x807B0994, data: '380000FF'}
+
+  - {name: RemoveItemCountStore, type: nop_insn, area_pal: [0x807B0A74, 0x807B0A90]}
+
+  - {name: FixCountsOffset1, type: patch, addr_pal: 0x807B02D8, data: '80850908'}
+  - {name: FixCountsOffset2, type: patch, addr_pal: 0x807B02E0, data: '90050908'}
+  - {name: FixCountsOffset3, type: patch, addr_pal: 0x807B02F0, data: '80840908'}
+  - {name: FixCountsOffset4, type: patch, addr_pal: 0x807B0304, data: '80030908'}
+
+  - {name: FixItemsOffset1, type: patch, addr_pal: 0x807B0310, data: '806308E0'}
+  - {name: FixItemsOffset2, type: patch, addr_pal: 0x809272CC, data: '907A08E0'}
+
+  - {name: FixEffectPlayer, type: branch_insn, branch_type: bl, src_addr_pal: 0x807B04BC, target_func: 'FixStockItemEffectPlayer'}
+  - {name: FixEffectPlayer2, type: branch_insn, branch_type: bl, src_addr_pal: 0x807B0580, target_func: 'FixStockItemEffectPlayer2'}
+  - {name: FixMoreEffectRelatedCrap, type: branch_insn, branch_type: bl, src_addr_pal: 0x807B05E8, target_func: 'FixMoreSIEffectRelatedCrap'}
+
+
+# STOCK ITEM SHADOW
+  # Original size: 0x280
+  # New size: 0x304
+  # Modified fields:
+  # - 0x264 : Item Counts (values for new powerups added onto this)
+  # New fields:
+  # - 0x28C : X Textboxes
+  # - 0x2B4 : Count Textboxes
+  # - 0x2DC : Button Bases
+
+  # add 0x10 for each new powerup
+  - name: ExpandStockItemShadow
+    type: patch
+    addr_pal: 0x807B2038
+    data: '38600304' # 0x280 + 0x84
+  
+  - name: NewLoadLayout
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x807B21B0
+    target_func: 'dStockItemShadow_c::loadLayout(void)'
+
+  - name: NewUpdate
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x807B2370
+    target_func: 'dStockItemShadow_c::update(void)'

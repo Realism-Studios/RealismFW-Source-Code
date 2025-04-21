@@ -1,0 +1,141 @@
+output_dir: "RealismASM"
+code_address: 0x808D9000
+defines: []
+modules:
+  - processed/prolog.yaml
+  - processed/profile.yaml
+  - processed/bugfixes.yaml
+  - processed/actorlog.eviltoml
+# - processed/anmlog.yaml
+  - processed/apDebug.yaml
+  - processed/heapbar.yaml
+  - processed/layoutDebug.yaml
+  - processed/actors.yaml
+  - processed/animtiles.yaml
+  - processed/checkWater.yaml
+  - processed/newSfx.yaml
+  - processed/compression.yaml
+  - processed/exceptionHandler.yaml
+  - processed/bonepiece.yaml
+  - processed/cobCourse.yaml
+  # - processed/blocksnake.yaml
+  - processed/signboard.yaml
+  - processed/bossBalboaWrench.yaml
+  - processed/bossBombDrop.yaml
+  # - processed/bossBridgeBowser.yaml
+  - processed/bossCaptainBowser.yaml
+  - processed/bossFuzzyBear.yaml
+  - processed/bossMegaGoomba.yaml
+  - processed/bossPodouble.yaml
+  - processed/bossRamboo.yaml
+  - processed/bossSamurshai.yaml
+  - processed/bossThwompaDomp.yaml
+  - processed/bossTopman.yaml
+  - processed/bossWrenchThrow.yaml
+  # - processed/bowserKey.yaml
+  - processed/soundHax.yaml
+  - processed/challengeStar.yaml
+  - processed/chestnut.yaml
+  - processed/classic_controller.yaml
+  # - processed/courseClear.yaml
+  - processed/creditsMgr.yaml
+  # - processed/crowdclapper.yaml
+  # - processed/cutScene.yaml
+  - processed/opening.yaml
+  - processed/effectVideo.yaml
+  - processed/electricLine.yaml
+  - processed/endingMgr.yaml
+  - processed/eventblock.yaml
+  - processed/eventlooper.yaml
+  - processed/fakeStarCoin.yaml
+  - processed/fileselect.yaml
+  - processed/firelaser.yaml
+  - processed/flipblock.yaml
+  - processed/gakenoko.yaml
+  - processed/growup.yaml
+  - processed/hardMode.yaml
+  - processed/dolphin.yaml
+  - processed/layouthax.yaml
+  - processed/pauseMenuHax.yaml
+  - processed/levelspecial.yaml
+  - processed/linegod.yaml
+  - processed/magicplatform.yaml
+  - processed/makeYourOwn.yaml
+  - processed/meteor.yaml
+  - processed/mrsun.yaml
+  - processed/msgbox.yaml
+  - processed/nsmbwUpdated.yaml
+  - processed/objkinoko.yaml
+  # - processed/pengi.yaml
+  - processed/bubbleSuit.yaml
+  - processed/pregame.yaml
+  - processed/pumpkinGoomba.yaml
+  - processed/randtiles.yaml
+  - processed/redRingRewards.yaml
+  - processed/replay.yaml
+  - processed/saveInfoBlock.yaml
+  - processed/shyguy.yaml
+  - processed/shyguyGiants.yaml
+  - processed/singAlong.yaml
+  - processed/soundPlayer.yaml
+  - processed/spritespawner.yaml
+  - processed/spriteswapper.yaml
+  - processed/spritetex.yaml
+  - processed/switchblock.yaml
+  - processed/thundercloud.yaml
+  - processed/tilegod.yaml
+  - processed/tilesetfixer.yaml
+  - processed/topman.yaml
+  - processed/unusedActorSprites.yaml
+  - processed/worldmaphax.yaml
+  # - processed/konbu.yaml
+  - processed/spikeTrap.yaml
+  - processed/midwayFlag.yaml
+  - processed/qblock.yaml
+  - processed/Player1CanChangeCharacter.yaml
+  - processed/whyIsThereAGoba.yaml
+  - processed/shop.yaml
+  - processed/titlescreenHax.yaml
+  - processed/poweruphax.yaml
+  - processed/boomeranghax.yaml
+  - processed/stockItem.yaml
+  - processed/lavawaves.yaml
+  - processed/collectionCoin.yaml
+  - processed/fakeCrash.yaml
+  - processed/cbf.yaml
+  - processed/courseselectguide.yaml
+  - processed/gameDisplay.yaml
+  - processed/courseSelectMenu.yaml
+  - processed/settingMenu.yaml
+  - processed/tryAgain.yaml
+  # - processed/fontHax.yaml # unfinished, doesn't work yet
+  - processed/mandySuit.yaml
+  - processed/videoMenu.yaml
+  - processed/yesNoWindow.yaml
+  - processed/goombaBoss.yaml
+  - processed/stage.yaml
+  - processed/courseSelectManager.yaml
+  - processed/splunkin.yaml
+  - processed/worldSelect.yaml
+  #- processed/piranhaPod.yaml # unfinished, doesn't work yet
+  - processed/flower.yaml
+  - processed/coinStack.yaml
+  - processed/koopatlas.yaml
+  - processed/sceneRedirect.yaml
+  - processed/NPCmanager.yaml
+  - processed/stageConfigHandler.yaml
+  # - processed/homeMenu.yaml
+  - processed/liquidsTex.yaml
+  - processed/galoomba.yaml
+  - processed/galoombawinged.yaml
+  - processed/goombud.yaml
+  - processed/nipperplant.yaml
+  - processed/muncher.yaml
+  - processed/config.yaml
+  - processed/languageSelect.yaml
+  - processed/saveFile.yaml
+  - processed/bomb_bro.yaml
+  - processed/personalization.yaml # this is gonna be a big one with all the gang of the Every Copy Of Realism Is Personalized
+  # - processed/backgroundAnimPlayer.yaml # doesn't work for some reason, but i'm probably just dumb as hell
+  - processed/gameOver.yaml
+  - processed/wm_start.yaml

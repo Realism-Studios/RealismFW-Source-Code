@@ -1,0 +1,37 @@
+---
+source_files: [../src/gameDisplayHax.cpp]
+hooks:
+  - name: ExtendGameDisplayClassSize
+    type: patch
+    addr_pal: 0x80157828
+    data: '386005A5' # 0x5A4 + 0x1
+
+  - name: GameDisplayOnCreate
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80157B70
+    target_func: 'dGameDisplay_c::onCreate(void)'
+
+  - name: GameDisplayLoadLayout
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80158830
+    target_func: 'dGameDisplay_c::createLayout(void)'
+
+  - name: GameDisplayOnExecute
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x801580D0
+    target_func: 'dGameDisplay_c::onExecute(void)'
+
+  - name: GameDisplaySetScore
+    type: branch_insn
+    branch_type: b
+    src_addr_pal: 0x80159DF0
+    target_func: 'dGameDisplay_c::setScore(int)'
+
+  # also has an effect on the countdown values
+  - name: ChangeScoreCountdownLoopCount
+    type: patch
+    addr_pal: 0x80159054
+    data: '38C00001'

@@ -1,0 +1,8 @@
+---
+source_files: [../src/tryAgain.cpp]
+hooks:
+  - name: DisplayTryAgainOnDeath
+    type: branch_insn
+    branch_type: bl
+    src_addr_pal: 0x8013D8EC
+    target_func: 'displayTryAgainScreen(void)'
